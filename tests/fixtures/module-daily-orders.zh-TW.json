@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "language": "zh-TW",
+  "mode": "module",
+  "title": "daily_orders.py 在做什麼",
+  "audience": "剛接手維護的同事",
+  "one_liner": "它每天把一天的訂單數一遍、算出營收，數不夠就直接喊停。",
+  "analogy": {
+    "text": "像收銀員晚上關店前把當天的收據全部拿出來數：先確認收據張數合理，再加總金額，最後寫在日結表上。",
+    "limits": "收銀員數的是真的收據；這支程式只相信上游給它的分區，上游漏給它也不知道。"
+  },
+  "ladder": {
+    "analogy": "關店前把當天收據數一遍再加總。",
+    "truth": "run() 讀取 orders_raw 的日期分區，validate_rowcount 少於 MIN_ROWS 就拋出例外，aggregate 只加總 status 為 paid 的金額，最後寫進 orders_daily。",
+    "caveat": "列數門檻是固定的 50,000，遇到真的很淡的日子會誤判為錯誤；而且它不會通知下游它失敗了。"
+  },
+  "scenes": [
+    {
+      "id": "s_run",
+      "title": "一天的流程",
+      "caption": "四個步驟接力，中間任何一步失敗就整個停下。",
+      "nodes": [
+        {"id": "n_load", "label": "load_partition 讀分區", "status": "verified", "note": "從 orders_raw 讀出指定日期。", "evidence": ["e_py"]},
+        {"id": "n_validate", "label": "validate_rowcount 檢查列數", "status": "verified", "note": "少於 MIN_ROWS 就拋 ValueError。", "evidence": ["e_py"]},
+        {"id": "n_agg", "label": "aggregate 加總營收", "status": "verified", "note": "只算 status 為 paid 的金額。", "evidence": ["e_py"]},
+        {"id": "n_write", "label": "寫入 orders_daily", "status": "inferred", "note": "write_table 的行為在另一個模組。", "evidence": ["e_write"]}
+      ],
+      "edges": [
+        {"from": "n_load", "to": "n_validate", "label": "rows"},
+        {"from": "n_validate", "to": "n_agg", "label": "通過"},
+        {"from": "n_agg", "to": "n_write", "label": "summary"}
+      ]
+    }
+  ],
+  "trace": [
+    {"step": 1, "scene": "s_run", "node": "n_load", "text": "讀出當天分區的所有訂單列。"},
+    {"step": 2, "scene": "s_run", "node": "n_validate", "text": "列數少於 50,000 就直接喊停。"},
+    {"step": 3, "scene": "s_run", "node": "n_agg", "text": "把已付款的金額加總。"},
+    {"step": 4, "scene": "s_run", "node": "n_write", "text": "寫成一列日結摘要。"}
+  ],
+  "failure_lens": [
+    {"id": "f_threshold", "what_breaks": "淡季或假日訂單少於 50,000 列", "symptom": "job 失敗，但其實資料是完整的", "status": "verified", "evidence": ["e_py"]},
+    {"id": "f_unpaid", "what_breaks": "status 欄位新增了 paid 以外的付款狀態", "symptom": "營收被低估，因為只加總 paid", "status": "verified", "evidence": ["e_py"]}
+  ],
+  "teach_back": [
+    {"question": "如果某天真的只有 30,000 筆訂單，會發生什麼事？", "answer": "validate_rowcount 會拋出 ValueError，整個 run 停在第二步，orders_daily 不會被寫入。"}
+  ],
+  "evidence": [
+    {
+      "id": "e_py",
+      "status": "verified",
+      "claim": "validate_rowcount 在列數少於 MIN_ROWS（50,000）時拋出 ValueError；aggregate 只加總 status 為 paid 的 amount",
+      "locator": "pipeline/daily_orders.py",
+      "quote": "if len(rows) < MIN_ROWS:",
+      "line_start": 14,
+      "line_end": 16
+    },
+    {
+      "id": "e_write",
+      "status": "inferred",
+      "claim": "write_table 會覆寫同一分區的既有列",
+      "reasoning": "從呼叫方式推測，但 write_table 定義在別的模組，本次沒有讀。"
+    }
+  ],
+  "mode_data": {
+    "source_root": "pipeline",
+    "entry": "n_load",
+    "exit": "n_write",
+    "inputs": ["orders_raw 的日期分區（每列一張訂單）"],
+    "outputs": ["orders_daily 的一列摘要：orders、revenue"]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "language": "zh-TW",
+  "mode": "concept",
+  "title": "《主題：一句名詞，最多 80 個全形字寬》",
+  "audience": "《具體的人，例如：第一次看月報的行銷主管》",
+  "one_liner": "《五歲也能懂的一句話，最多 60 個全形字寬，不換行》",
+  "analogy": {
+    "text": "《一個日常類比》",
+    "limits": "《類比在哪裡失真》"
+  },
+  "ladder": {
+    "analogy": "《類比層：像什麼》",
+    "truth": "《技術事實層：用來源說話》",
+    "caveat": "《但要注意：真的會被誤用的地方》"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "title": "《場景標題》",
+      "caption": "《一句話說這個場景在講什麼》",
+      "nodes": [
+        {"id": "n1", "label": "《誰在做什麼》", "status": "verified", "note": "《可選補充》", "evidence": ["e1"]},
+        {"id": "n2", "label": "《誰在做什麼》", "status": "inferred", "note": "《可選補充》", "evidence": []}
+      ],
+      "edges": [
+        {"from": "n1", "to": "n2", "label": "《關係》"}
+      ]
+    }
+  ],
+  "trace": [
+    {"step": 1, "scene": "s1", "node": "n1", "text": "《第一步發生什麼》"}
+  ],
+  "failure_lens": [
+    {"id": "f1", "what_breaks": "《什麼時候會壞》", "symptom": "《讀者會看到什麼》", "status": "inferred", "evidence": []}
+  ],
+  "teach_back": [
+    {"question": "《請讀者用自己的話回答的問題》", "answer": "《參考答案》"}
+  ],
+  "glossary": [
+    {"term": "《術語》", "plain": "《白話》"}
+  ],
+  "evidence": [
+    {
+      "id": "e1",
+      "status": "verified",
+      "claim": "《這筆證據支持的主張》",
+      "locator": "《相對路徑或 http(s) URL》",
+      "quote": "《逐字短引述》",
+      "retrieved_at": "《URL 來源必填：2026-08-25》"
+    }
+  ],
+  "mode_data": {
+    "misconceptions": [
+      {"myth": "《使用者真的會講的誤解》", "reality": "《實際上》"}
+    ]
+  }
+}

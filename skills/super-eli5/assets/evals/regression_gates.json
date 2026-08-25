@@ -1,0 +1,26 @@
+{
+  "min_pass_rate_delta": 0.0,
+  "max_time_increase_seconds": 30.0,
+  "max_token_increase": 5000,
+  "require_non_negative_pass_rate": true,
+  "max_under_trigger_failures": 1,
+  "max_over_trigger_failures": 1,
+  "required_eval_tags": [
+    "should-trigger",
+    "should-not-trigger",
+    "near-miss",
+    "happy-path",
+    "edge-case",
+    "failure-mode",
+    "overlap-neighbor"
+  ],
+  "required_eval_languages": ["zh", "en", "mixed"],
+  "required_trigger_classes": ["direct", "indirect", "negative"],
+  "deterministic_gates": {
+    "self_check": "python scripts/self_check.py",
+    "unit_tests": "python -m unittest discover -s tests",
+    "minimum_examples": 3,
+    "require_byte_identical_render": true,
+    "require_zero_verify_findings": true
+  }
+}

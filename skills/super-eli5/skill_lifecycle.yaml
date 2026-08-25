@@ -1,0 +1,59 @@
+name: super-eli5
+status: validated
+owner: Openclaw-Metis
+archetype: ops
+primary_structure_pattern: pipeline
+lifecycle:
+  created_at: 2026-08-25
+  last_validated_at: 2026-08-25
+  last_released_at: null
+  review_interval_days: 60
+  next_review_due: 2026-10-24
+support:
+  primary_hosts:
+    - agent-skills
+    - codex
+    - claude-code
+    - openclaw
+  secondary_hosts:
+    - generic-python-agent-runtime
+  unsupported_hosts:
+    - chat-only-hosts-without-filesystem
+risk:
+  external_side_effects: false
+  requires_secrets: false
+  data_sensitivity: medium
+dependencies:
+  scripts:
+    - scripts/validate_spec.py
+    - scripts/render_html.py
+    - scripts/verify_artifact.py
+    - scripts/self_check.py
+  references:
+    - references/truth-ladder.md
+    - references/story-grammars.md
+    - references/spec-contract.md
+    - references/audience-and-style.md
+    - references/qa-checklist.md
+    - references/readiness_report.md
+    - references/checklist_template.md
+stewardship:
+  reviewers:
+    - Openclaw-Metis
+  stale_after_days: 120
+  escalation:
+    stale: needs-maintenance
+    no_owner: orphaned
+portfolio:
+  overlaps_with:
+    - mermaid-diagram
+    - humanize-text
+    - knowledge-framework
+  hands_off_to:
+    - slide-studio
+    - technical-documentation-writer
+    - deep-research
+  depends_on: []
+  supersedes: []
+  deprecated_by: null
+  shares_tool_contract_with: []

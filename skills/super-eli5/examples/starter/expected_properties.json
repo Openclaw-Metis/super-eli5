@@ -1,0 +1,27 @@
+{
+  "must_include_sections": [
+    "一句話版",
+    "一個類比",
+    "三層真相",
+    "什麼時候會壞",
+    "教回來",
+    "證據"
+  ],
+  "must_include_terms": [
+    "類比",
+    "推論",
+    "已驗證",
+    "0.05"
+  ],
+  "must_not_include": [
+    "97% 機率比較好是對的",
+    "placeholder"
+  ],
+  "must_correct_misconception": "p 值不是新版比較好的機率",
+  "evidence_rules": {
+    "verified_needs_quote": true,
+    "url_needs_retrieved_at": true,
+    "example_numbers_marked_analogy": true
+  },
+  "minimum_use_cases": 1
+}

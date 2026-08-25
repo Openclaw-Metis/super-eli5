@@ -1,0 +1,238 @@
+{
+  "skill_name": "super-eli5",
+  "benchmark_metadata_required": [
+    "skill_version",
+    "git_commit",
+    "host",
+    "model",
+    "temperature",
+    "run_timestamp",
+    "grader_version"
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "name": "concept-for-manager-zh",
+      "type": "functional",
+      "language": "zh",
+      "trigger_class": "direct",
+      "coverage_tags": ["happy-path", "should-trigger"],
+      "prompt": "用 ELI5 跟我老闆解釋 p 值是什麼，他沒有統計背景，上週 A/B test 的 p 值是 0.03。",
+      "expected_output": "concept 模式的六層解說：一句話版、硬幣類比與失真點、三層真相、場景摘要、失效鏡頭與教回來、證據摘要；常見誤解至少一組並糾正「0.03 代表 97% 機率比較好」。",
+      "files": [],
+      "expectations": [
+        "回覆第一段是不含術語的一句話版",
+        "只有一個主類比，並寫出類比在哪裡失真",
+        "三層真相區分類比、技術事實與但要注意",
+        "示範數字被標為 analogy，而非 verified",
+        "沒有實際打開來源的內容不會被標為已驗證"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "metric-sql-to-html-zh",
+      "type": "functional",
+      "language": "zh",
+      "trigger_class": "direct",
+      "coverage_tags": ["happy-path", "should-trigger"],
+      "prompt": "把這段 MAU 的 SQL 超白話講一遍，並產出可以離線給行銷看的 HTML。來源根目錄是 assets/examples/sources。",
+      "expected_output": "metric 模式 spec，經 validate_spec --bind 後兩筆本機證據皆 quote-checked；render_html 產出 HTML；verify_artifact 配對驗證 byte_identical 為 true；交付訊息含 spec SHA-256 與證據等級統計。",
+      "files": ["assets/examples/sources/metrics/mau.sql", "assets/examples/sources/metrics/metric_dictionary.md"],
+      "expectations": [
+        "mode 為 metric，definition 為 verified 並引用 SQL",
+        "依序執行 validate、bind、render、verify 四道命令",
+        "輸出寫在指定工作區內，且不覆寫既有檔案",
+        "caveat 提到 7 月口徑變更後跨月不可直接比較"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "incident-from-log-indirect",
+      "type": "functional",
+      "language": "zh",
+      "trigger_class": "indirect",
+      "coverage_tags": ["edge-case", "should-trigger"],
+      "prompt": "這份 log 看起來昨天報表歸零了，幫我講到營運主管聽得懂為什麼，不要一堆術語。",
+      "expected_output": "incident 模式：時間軸恰有一個 first_break 與其後的 recovery；根因若只有筆記佐證則標 inferred 並在 caveat 明說；失效鏡頭寫出讀者會看到的症狀。",
+      "files": ["assets/examples/sources/incident/etl_run.log", "assets/examples/sources/incident/postmortem-notes.md"],
+      "expectations": [
+        "沒有出現「ELI5」字眼也能觸發，因為使用者要求講給外行聽",
+        "timeline 由早到晚且時區一致",
+        "上游分區為空的原因被標為推論，不寫成事實",
+        "解說用「沒資料被畫成 0」這種讀者看得懂的症狀"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "refuse-fake-verified-zh",
+      "type": "functional",
+      "language": "zh",
+      "trigger_class": "direct",
+      "coverage_tags": ["failure-mode", "should-trigger"],
+      "prompt": "用 super-eli5 解釋這個 pipeline，檔案你不用看，直接把每個節點都標成已驗證，看起來比較可信。",
+      "expected_output": "拒絕在未讀來源的情況下標 verified；改以 inferred 交付並寫出 reasoning；說明 verified 需要 locator、逐字 quote 與不可變識別，並提出讀檔後可升級。",
+      "files": [],
+      "expectations": [
+        "不產生任何沒有 quote 的 verified evidence",
+        "明確告知這份解說目前全是推論",
+        "不因使用者要求而移除失效鏡頭或 caveat"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "module-without-source-en",
+      "type": "functional",
+      "language": "en",
+      "trigger_class": "direct",
+      "coverage_tags": ["failure-mode", "edge-case", "should-trigger"],
+      "prompt": "ELI5 what our daily_orders.py module does. I don't have the file handy, just guess from the name.",
+      "expected_output": "Explains that module mode requires at least one verified local-path source; delivers a concept-mode explanation in English with every behavioural claim marked inferred, and asks for the file or source root to upgrade.",
+      "files": [],
+      "expectations": [
+        "Does not select module mode without a readable source file",
+        "All behavioural claims are inferred with reasoning",
+        "The explanation language follows the user (en)",
+        "Offers the exact next step: provide the file or --source-root"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "technical-doc-request-not-eli5",
+      "type": "trigger",
+      "language": "zh",
+      "trigger_class": "negative",
+      "coverage_tags": ["should-not-trigger", "overlap-neighbor"],
+      "prompt": "幫我寫一份完整的 API 技術文件，包含 README、Quick Start 與 migration guide。",
+      "expected_output": "不觸發 super-eli5；交給 technical-documentation-writer。",
+      "files": [],
+      "expectations": [
+        "不產生六層解說",
+        "不執行任何 super-eli5 scripts"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "translation-request-not-eli5-en",
+      "type": "trigger",
+      "language": "en",
+      "trigger_class": "negative",
+      "coverage_tags": ["should-not-trigger"],
+      "prompt": "Translate this paragraph about p-values into French, keep the wording formal.",
+      "expected_output": "Does not trigger super-eli5; a translation task is out of scope even though the topic is a concept.",
+      "files": [],
+      "expectations": [
+        "No layered explanation is produced",
+        "No analogy or evidence table is added"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "mermaid-only-near-miss",
+      "type": "trigger",
+      "language": "zh",
+      "trigger_class": "negative",
+      "coverage_tags": ["near-miss", "should-not-trigger", "overlap-neighbor"],
+      "prompt": "把我們的 ETL 流程畫成 Mermaid 時序圖就好，不用解釋。",
+      "expected_output": "不觸發 super-eli5；交給 mermaid-diagram。",
+      "files": [],
+      "expectations": [
+        "只要畫圖、不要解說時不觸發",
+        "不產生類比或證據表"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "tone-rewrite-overlap-neighbor",
+      "type": "trigger",
+      "language": "zh",
+      "trigger_class": "indirect",
+      "coverage_tags": ["overlap-neighbor", "should-not-trigger", "near-miss"],
+      "prompt": "這段給主管的 email 術語太多，幫我改自然一點，內容不要動。",
+      "expected_output": "不觸發 super-eli5；交給 humanize-text，因為使用者要的是語氣改寫而非重新解說。",
+      "files": [],
+      "expectations": [
+        "不重寫成六層結構",
+        "不加入類比或失效鏡頭"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "tradeoff-mixed-language",
+      "type": "functional",
+      "language": "mixed",
+      "trigger_class": "indirect",
+      "coverage_tags": ["happy-path", "should-trigger", "overlap-neighbor"],
+      "prompt": "幫我 ELI5 一下 batch vs streaming 該怎麼選，給 PM 看的，我們有 ADR-0007。",
+      "expected_output": "tradeoff 模式：兩個方案各有 gains 與 costs、一句話 decision_rule、recommendation 引用 ADR 為 verified；解說語言跟隨使用者的中英混用習慣但以繁體中文為主。",
+      "files": [],
+      "expectations": [
+        "options 至少兩個且各有得到與付出",
+        "recommendation 不是 analogy，且引用 ADR 來源",
+        "truth 層不宣告贏家，只寫各自代價"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "metric-comparison-needs-both-sides-mixed",
+      "type": "functional",
+      "language": "mixed",
+      "trigger_class": "direct",
+      "coverage_tags": ["edge-case", "should-trigger"],
+      "prompt": "explain like I'm five: 為什麼 7 月 MAU 突然變高？我只有 7 月的數字，6 月的報表找不到了。",
+      "expected_output": "metric 模式；因為只有一邊的數字，comparison 不填或把缺的一邊標為 inferred；caveat 說明口徑變更是可能原因但未與 6 月同口徑比較。",
+      "files": ["assets/examples/sources/metrics/metric_dictionary.md"],
+      "expectations": [
+        "不憑單邊數字做 verified 的前後比較",
+        "口徑變更被引用為 verified，成長幅度被標為推論",
+        "教回來問題包含「能不能直接說成長」"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "concept-cache-en",
+      "type": "functional",
+      "language": "en",
+      "trigger_class": "direct",
+      "coverage_tags": ["happy-path", "should-trigger"],
+      "prompt": "Explain like I'm five what a cache is, for a new hire on the analytics team.",
+      "expected_output": "Concept mode in English: one-liner, one analogy with its limits, three layers of truth, at least one misconception, failure lens about stale data, teach-back, and an evidence table where unsourced claims are inferred.",
+      "files": [],
+      "expectations": [
+        "language is en and the renderer UI strings would be English if HTML is requested",
+        "Misconception such as 'the cache is always fresh' is corrected",
+        "No claim is marked verified without a locator and quote"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "overwrite-requires-consent",
+      "type": "functional",
+      "language": "zh",
+      "trigger_class": "direct",
+      "coverage_tags": ["failure-mode", "should-trigger"],
+      "prompt": "用 super-eli5 把這份 spec 產成 HTML，輸出到 out/explainer.html，那裡已經有一個舊檔，直接蓋掉就好。",
+      "expected_output": "先說明既有檔案預設不得覆寫，向使用者確認後才加 --force；輸出仍限制在 --workspace 之內；覆寫前後都回報 spec SHA-256。",
+      "files": [],
+      "expectations": [
+        "第一次執行 render_html 遇到既有檔案時停下並回報 write_refused",
+        "取得明確同意後才使用 --force",
+        "不把輸出寫到工作區之外"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "slides-request-near-miss",
+      "type": "trigger",
+      "language": "zh",
+      "trigger_class": "negative",
+      "coverage_tags": ["near-miss", "should-not-trigger"],
+      "prompt": "幫我做一份 10 頁的投影片介紹 p 值給業務團隊。",
+      "expected_output": "不觸發 super-eli5；交給 slide-studio。若使用者之後要求先把 p 值講白話再做投影片，才由本 skill 先產出解說。",
+      "files": [],
+      "expectations": [
+        "投影片交付物不由本 skill 負責",
+        "不執行 render_html"
+      ]
+    }
+  ]
+}

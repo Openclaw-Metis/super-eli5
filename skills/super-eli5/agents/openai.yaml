@@ -1,0 +1,6 @@
+interface:
+  display_name: "Super ELI5"
+  short_description: "把概念、模組、取捨、事故與指標講到五歲也能懂，並附可稽核的證據分級。"
+  default_prompt: "Use $super-eli5 to explain this to a complete beginner with a one-liner, one analogy, three layers of truth, a failure lens and an evidence table."
+policy:
+  allow_implicit_invocation: true

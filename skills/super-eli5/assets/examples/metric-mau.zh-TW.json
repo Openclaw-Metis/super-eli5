@@ -1,0 +1,257 @@
+{
+  "analogy": {
+    "limits": "「進門」在我們家有明確定義（三種有效事件），而且從 7 月起連「看內容」也算進門，所以 7 月前後的人數不能直接比。",
+    "text": "像一間店數這個月「有進門的不同客人」有幾位：同一個人來十次也只算一位，只是路過看櫥窗不算。"
+  },
+  "audience": "第一次看月報的行銷主管",
+  "evidence": [
+    {
+      "claim": "MAU 是三種有效事件、排除內部帳號後，以 Asia/Taipei 自然月分組的去重 user_id 數",
+      "content_sha256": "1cc6a05e750f78eba781e896b79cc5227f95668fe84ff3e3299c979e8e384188",
+      "id": "e_sql",
+      "line_end": 15,
+      "line_start": 5,
+      "locator": "metrics/mau.sql",
+      "quote": "SELECT month, COUNT(DISTINCT user_id) AS mau",
+      "status": "verified",
+      "verification": "quote-checked"
+    },
+    {
+      "claim": "2026-07-01 起 content_view 才納入有效事件，之前只算 session_start 與 purchase",
+      "content_sha256": "efb6c1ccb1bbfd181b0fd819ba70f32c7083aa973e67a1375c0d17a169f278ad",
+      "id": "e_dict",
+      "locator": "metrics/metric_dictionary.md",
+      "quote": "2026-07-01 起 content_view 才納入有效事件",
+      "status": "verified",
+      "verification": "quote-checked"
+    }
+  ],
+  "failure_lens": [
+    {
+      "evidence": [
+        "e_sql"
+      ],
+      "id": "f_tz",
+      "status": "verified",
+      "symptom": "同一份資料在兩個報表的 MAU 差幾百人",
+      "what_breaks": "用 UTC 切月，台北時間月底晚上 8 點以後的事件會跑到下個月"
+    },
+    {
+      "evidence": [],
+      "id": "f_internal",
+      "status": "inferred",
+      "symptom": "新功能上線當週 MAU 小幅膨脹，來源集中在公司 IP",
+      "what_breaks": "內部測試帳號沒被標上 internal_flag"
+    }
+  ],
+  "glossary": [
+    {
+      "plain": "同一個人不管出現幾次都只算一次。",
+      "term": "去重"
+    },
+    {
+      "plain": "我們認定「有在用」的行為：開啟、購買、看內容。",
+      "term": "有效事件"
+    },
+    {
+      "plain": "這個數字是怎麼定義、怎麼算的規則；規則變了數字就不能直接比。",
+      "term": "口徑"
+    }
+  ],
+  "ladder": {
+    "analogy": "MAU 是這個月有進門的不同客人數。",
+    "caveat": "2026-07-01 起 content_view 才納入有效事件，7 月起的 MAU 天生會比 6 月前高，跨月比較必須註明口徑變更。",
+    "truth": "MAU = 當月至少產生一次有效事件（session_start、purchase、content_view）的去重 user_id 數，時區 Asia/Taipei，排除 internal_flag = true 的內部帳號。"
+  },
+  "language": "zh-TW",
+  "mode": "metric",
+  "mode_data": {
+    "comparison": {
+      "after": "7 月（新口徑：含 content_view）",
+      "before": "6 月（舊口徑：不含 content_view）",
+      "evidence": [
+        "e_dict"
+      ]
+    },
+    "definition": {
+      "evidence": [
+        "e_sql",
+        "e_dict"
+      ],
+      "status": "verified",
+      "text": "當月至少產生一次有效事件的去重 user_id 數；有效事件為 session_start、purchase、content_view；排除 internal_flag = true。"
+    },
+    "lineage": [
+      {
+        "from": "analytics.events",
+        "to": "monthly_events",
+        "transform": "篩選三種有效事件、排除內部帳號、以 Asia/Taipei 取月份"
+      },
+      {
+        "from": "monthly_events",
+        "to": "mau",
+        "transform": "按月 COUNT(DISTINCT user_id)"
+      }
+    ],
+    "metric_name": "MAU（Monthly Active Users）",
+    "scope": {
+      "filters": "event_name IN (session_start, purchase, content_view) 且 internal_flag = false",
+      "grain": "自然月",
+      "time_window": "以 Asia/Taipei 時區切月"
+    }
+  },
+  "one_liner": "MAU 就是這個月「真的有來用」的人數，一個人只算一次。",
+  "scenes": [
+    {
+      "caption": "先撈事件，再去重，最後按月數人。",
+      "edges": [
+        {
+          "from": "n_events",
+          "label": "WHERE",
+          "to": "n_filter"
+        },
+        {
+          "from": "n_filter",
+          "label": "DISTINCT",
+          "to": "n_dedupe"
+        },
+        {
+          "from": "n_dedupe",
+          "label": "GROUP BY month",
+          "to": "n_mau"
+        }
+      ],
+      "id": "s_calc",
+      "nodes": [
+        {
+          "evidence": [
+            "e_sql"
+          ],
+          "id": "n_events",
+          "label": "analytics.events 事件表",
+          "note": "每一列是一次使用者行為。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_sql",
+            "e_dict"
+          ],
+          "id": "n_filter",
+          "label": "只留三種有效事件",
+          "note": "session_start、purchase、content_view，並排除內部帳號。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_sql"
+          ],
+          "id": "n_dedupe",
+          "label": "同一人同月只算一次",
+          "note": "COUNT(DISTINCT user_id)。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_sql"
+          ],
+          "id": "n_mau",
+          "label": "每月 MAU",
+          "note": "按 Asia/Taipei 的自然月分組。",
+          "status": "verified"
+        }
+      ],
+      "title": "從事件到人數"
+    },
+    {
+      "caption": "口徑在 7 月變了，不是使用者突然變多。",
+      "edges": [
+        {
+          "from": "n_before",
+          "label": "2026-07-01",
+          "to": "n_after"
+        },
+        {
+          "from": "n_after",
+          "label": "所以",
+          "to": "n_jump"
+        }
+      ],
+      "id": "s_change",
+      "nodes": [
+        {
+          "evidence": [
+            "e_dict"
+          ],
+          "id": "n_before",
+          "label": "6 月前：只算開啟與購買",
+          "note": "只有 session_start 與 purchase 算有效事件。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_dict"
+          ],
+          "id": "n_after",
+          "label": "7 月起：看內容也算",
+          "note": "content_view 納入後，只看不買的人也被算進來。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_dict"
+          ],
+          "id": "n_jump",
+          "label": "跨月比較要註明口徑",
+          "note": "用同一口徑回算 6 月才能比。",
+          "status": "inferred"
+        }
+      ],
+      "title": "為什麼 7 月看起來跳了一級"
+    }
+  ],
+  "teach_back": [
+    {
+      "answer": "1 個。MAU 是去重後的人數，不是次數。",
+      "question": "一個人這個月開了 30 次 app，算幾個 MAU？"
+    },
+    {
+      "answer": "不行。7 月起 content_view 也算有效事件，要先用同一口徑回算 6 月再比。",
+      "question": "7 月 MAU 比 6 月高 15%，可以直接說成長嗎？"
+    }
+  ],
+  "title": "MAU 是怎麼算出來的",
+  "trace": [
+    {
+      "node": "n_events",
+      "scene": "s_calc",
+      "step": 1,
+      "text": "從事件表出發，每一列是一次行為。"
+    },
+    {
+      "node": "n_filter",
+      "scene": "s_calc",
+      "step": 2,
+      "text": "只留三種有效事件，丟掉內部測試帳號。"
+    },
+    {
+      "node": "n_dedupe",
+      "scene": "s_calc",
+      "step": 3,
+      "text": "同一個人在同一個月只算一次。"
+    },
+    {
+      "node": "n_mau",
+      "scene": "s_calc",
+      "step": 4,
+      "text": "按台北時區的自然月數人，得到每月 MAU。"
+    },
+    {
+      "node": "n_after",
+      "scene": "s_change",
+      "step": 5,
+      "text": "7 月起「看內容」也算有效事件，人數自然變多。"
+    }
+  ],
+  "version": 1
+}

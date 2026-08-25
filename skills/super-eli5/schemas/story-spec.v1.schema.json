@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Openclaw-Metis/super-eli5/schemas/story-spec.v1.schema.json",
+  "title": "super-eli5 story spec v1",
+  "description": "結構層契約。語意規則（mode 契約、三層真相、provenance 綁定）由 scripts/validate_spec.py 執行；此 schema 用於編輯器提示與 CI 的第一道檢查。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "language", "mode", "title", "audience", "one_liner", "analogy", "ladder", "scenes", "failure_lens", "teach_back", "evidence", "mode_data"],
+  "properties": {
+    "version": {"const": 1},
+    "language": {"enum": ["zh-TW", "zh-CN", "en"]},
+    "mode": {"enum": ["concept", "module", "tradeoff", "incident", "metric"]},
+    "title": {"$ref": "#/$defs/text"},
+    "audience": {"$ref": "#/$defs/text"},
+    "one_liner": {"type": "string", "minLength": 1, "pattern": "^[^\\n]*$"},
+    "analogy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "limits"],
+      "properties": {"text": {"$ref": "#/$defs/text"}, "limits": {"$ref": "#/$defs/text"}}
+    },
+    "ladder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analogy", "truth", "caveat"],
+      "properties": {"analogy": {"$ref": "#/$defs/text"}, "truth": {"$ref": "#/$defs/text"}, "caveat": {"$ref": "#/$defs/text"}}
+    },
+    "scenes": {"type": "array", "minItems": 1, "maxItems": 7, "items": {"$ref": "#/$defs/scene"}},
+    "trace": {"type": "array", "minItems": 0, "maxItems": 24, "items": {"$ref": "#/$defs/trace_step"}},
+    "failure_lens": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/failure"}},
+    "teach_back": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"$ref": "#/$defs/teach_back"}},
+    "glossary": {"type": "array", "minItems": 0, "maxItems": 16, "items": {"$ref": "#/$defs/glossary_entry"}},
+    "evidence": {"type": "array", "minItems": 1, "maxItems": 40, "items": {"$ref": "#/$defs/evidence"}},
+    "mode_data": {
+      "oneOf": [
+        {"$ref": "#/$defs/mode_concept"},
+        {"$ref": "#/$defs/mode_module"},
+        {"$ref": "#/$defs/mode_tradeoff"},
+        {"$ref": "#/$defs/mode_incident"},
+        {"$ref": "#/$defs/mode_metric"}
+      ]
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"},
+    "text": {"type": "string", "minLength": 1},
+    "status": {"enum": ["analogy", "inferred", "verified"]},
+    "status_no_analogy": {"enum": ["inferred", "verified"]},
+    "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
+    "iso_datetime": {"type": "string", "minLength": 10},
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "caption", "nodes"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"$ref": "#/$defs/text"},
+        "caption": {"$ref": "#/$defs/text"},
+        "nodes": {"type": "array", "minItems": 2, "maxItems": 6, "items": {"$ref": "#/$defs/node"}},
+        "edges": {"type": "array", "minItems": 0, "maxItems": 12, "items": {"$ref": "#/$defs/edge"}}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"$ref": "#/$defs/text"},
+        "status": {"$ref": "#/$defs/status"},
+        "note": {"type": "string"},
+        "evidence": {"$ref": "#/$defs/evidence_refs"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {"from": {"$ref": "#/$defs/id"}, "to": {"$ref": "#/$defs/id"}, "label": {"type": "string"}}
+    },
+    "trace_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "scene", "node", "text"],
+      "properties": {"step": {"type": "integer", "minimum": 1, "maximum": 24}, "scene": {"$ref": "#/$defs/id"}, "node": {"$ref": "#/$defs/id"}, "text": {"$ref": "#/$defs/text"}}
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "what_breaks", "symptom"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "what_breaks": {"$ref": "#/$defs/text"},
+        "symptom": {"$ref": "#/$defs/text"},
+        "status": {"$ref": "#/$defs/status_no_analogy"},
+        "evidence": {"$ref": "#/$defs/evidence_refs"}
+      }
+    },
+    "teach_back": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question", "answer"],
+      "properties": {"question": {"$ref": "#/$defs/text"}, "answer": {"$ref": "#/$defs/text"}}
+    },
+    "glossary_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term", "plain"],
+      "properties": {"term": {"$ref": "#/$defs/text"}, "plain": {"$ref": "#/$defs/text"}}
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "claim"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "status": {"$ref": "#/$defs/status"},
+        "claim": {"$ref": "#/$defs/text"},
+        "locator": {"type": "string", "minLength": 1},
+        "quote": {"type": "string"},
+        "retrieved_at": {"$ref": "#/$defs/iso_datetime"},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "line_start": {"type": "integer", "minimum": 1},
+        "line_end": {"type": "integer", "minimum": 1},
+        "reasoning": {"type": "string"},
+        "note": {"type": "string"},
+        "verification": {"enum": ["structural", "content-bound", "quote-checked"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "verified"}}}, "then": {"required": ["locator", "quote"]}},
+        {"if": {"properties": {"status": {"const": "inferred"}}}, "then": {"required": ["reasoning"]}},
+        {"dependentRequired": {"line_start": ["line_end"], "line_end": ["line_start"]}}
+      ]
+    },
+    "mode_concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["misconceptions"],
+      "properties": {
+        "misconceptions": {
+          "type": "array", "minItems": 1, "maxItems": 8,
+          "items": {"type": "object", "additionalProperties": false, "required": ["myth", "reality"], "properties": {"myth": {"$ref": "#/$defs/text"}, "reality": {"$ref": "#/$defs/text"}}}
+        }
+      }
+    },
+    "mode_module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_root", "entry", "exit", "inputs", "outputs"],
+      "properties": {
+        "source_root": {"$ref": "#/$defs/text"},
+        "entry": {"$ref": "#/$defs/id"},
+        "exit": {"$ref": "#/$defs/id"},
+        "inputs": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"$ref": "#/$defs/text"}},
+        "outputs": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"$ref": "#/$defs/text"}}
+      }
+    },
+    "mode_tradeoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["options", "decision_rule", "recommendation"],
+      "properties": {
+        "options": {
+          "type": "array", "minItems": 2, "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["id", "name", "gains", "costs"],
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "name": {"$ref": "#/$defs/text"},
+              "gains": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"$ref": "#/$defs/text"}},
+              "costs": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"$ref": "#/$defs/text"}},
+              "nodes": {"type": "array", "items": {"$ref": "#/$defs/id"}}
+            }
+          }
+        },
+        "decision_rule": {"$ref": "#/$defs/text"},
+        "recommendation": {
+          "type": "object", "additionalProperties": false, "required": ["option", "status", "because"],
+          "properties": {"option": {"$ref": "#/$defs/id"}, "status": {"$ref": "#/$defs/status_no_analogy"}, "because": {"$ref": "#/$defs/text"}, "evidence": {"$ref": "#/$defs/evidence_refs"}}
+        }
+      }
+    },
+    "mode_incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeline", "root_cause"],
+      "properties": {
+        "timeline": {
+          "type": "array", "minItems": 2, "maxItems": 24,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["t", "event", "kind"],
+            "properties": {"t": {"$ref": "#/$defs/iso_datetime"}, "event": {"$ref": "#/$defs/text"}, "kind": {"enum": ["normal", "first_break", "detection", "mitigation", "recovery"]}, "evidence": {"$ref": "#/$defs/evidence_refs"}}
+          }
+        },
+        "root_cause": {
+          "type": "object", "additionalProperties": false, "required": ["text", "status"],
+          "properties": {"text": {"$ref": "#/$defs/text"}, "status": {"$ref": "#/$defs/status_no_analogy"}, "evidence": {"$ref": "#/$defs/evidence_refs"}}
+        },
+        "contributing_factors": {"type": "array", "minItems": 0, "maxItems": 8, "items": {"$ref": "#/$defs/text"}}
+      }
+    },
+    "mode_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_name", "definition", "lineage", "scope"],
+      "properties": {
+        "metric_name": {"$ref": "#/$defs/text"},
+        "definition": {
+          "type": "object", "additionalProperties": false, "required": ["text", "status"],
+          "properties": {"text": {"$ref": "#/$defs/text"}, "status": {"const": "verified"}, "evidence": {"$ref": "#/$defs/evidence_refs"}}
+        },
+        "lineage": {
+          "type": "array", "minItems": 1, "maxItems": 12,
+          "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "transform"], "properties": {"from": {"$ref": "#/$defs/text"}, "to": {"$ref": "#/$defs/text"}, "transform": {"$ref": "#/$defs/text"}}}
+        },
+        "scope": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"grain": {"type": "string"}, "time_window": {"type": "string"}, "filters": {"type": "string"}}
+        },
+        "comparison": {
+          "type": "object", "additionalProperties": false, "required": ["before", "after", "evidence"],
+          "properties": {"before": {"$ref": "#/$defs/text"}, "after": {"$ref": "#/$defs/text"}, "evidence": {"$ref": "#/$defs/evidence_refs"}}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tmp
+.super-eli5-*.tmp
+out/
+.DS_Store
+Thumbs.db

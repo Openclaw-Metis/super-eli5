@@ -1,0 +1,281 @@
+{
+  "analogy": {
+    "limits": "真實情況多一層：我們的「進貨檢查」其實有擋下空箱子，只是「掛牌子的人」沒被通知，還是照舊掛牌。",
+    "text": "像早餐店每天早上等牛奶送來再開店。那天牛奶車沒到，店員照常掛出「今日供應 0 杯」的牌子，客人以為真的賣光了。"
+  },
+  "audience": "營運主管與上游資料團隊",
+  "evidence": [
+    {
+      "claim": "8/17 分區為空使聚合 job 驗證失敗，但 06:00 的儀表板刷新仍以 8/16 分區成功刷新，11:01 回補後恢復",
+      "content_sha256": "bc8867220d388119898d0d0edbd12ee7b950a11e428077d831d8bf3349967ff8",
+      "id": "e_log",
+      "locator": "incident/etl_run.log",
+      "quote": "step=validate_rowcount failed: partition 2026-08-17 is empty",
+      "status": "verified",
+      "verification": "quote-checked"
+    },
+    {
+      "claim": "dashboard_refresh 不知道上游失敗，仍用舊分區刷新，因此 8/17 顯示為 0；上游分區為空的原因待確認",
+      "content_sha256": "f3b69d408d8c7abd2a01c407ac62e3acd09d6ce98ed4fdd34dd334b71a5b7aca",
+      "id": "e_notes",
+      "locator": "incident/postmortem-notes.md",
+      "quote": "dashboard_refresh 不知道上游失敗，仍用舊分區（8/16）刷新",
+      "status": "verified",
+      "verification": "quote-checked"
+    },
+    {
+      "claim": "上游分區為空可能與當晚 CDC 同步重試有關",
+      "id": "e_cdc",
+      "reasoning": "事後筆記提到同步有重試紀錄，但尚未取得上游團隊的確認或同步 log。",
+      "status": "inferred"
+    }
+  ],
+  "failure_lens": [
+    {
+      "evidence": [
+        "e_log",
+        "e_notes"
+      ],
+      "id": "f_silent",
+      "status": "verified",
+      "symptom": "儀表板一切正常，但數字是舊的或 0",
+      "what_breaks": "刷新流程只看自己有沒有跑完，不看上游有沒有失敗"
+    },
+    {
+      "evidence": [
+        "e_notes"
+      ],
+      "id": "f_zero",
+      "status": "inferred",
+      "symptom": "營收看起來歸零，其實是缺資料",
+      "what_breaks": "「沒有資料」和「資料為 0」在圖上長得一樣"
+    }
+  ],
+  "glossary": [
+    {
+      "plain": "把大表按日期切成一天一格，方便只處理某一天。",
+      "term": "分區"
+    },
+    {
+      "plain": "把缺掉那一天的資料重新補進來。",
+      "term": "回補"
+    },
+    {
+      "plain": "把上游資料庫的變動即時複製過來的機制。",
+      "term": "CDC 同步"
+    }
+  ],
+  "ladder": {
+    "analogy": "牛奶沒送到，店卻照常掛牌，牌子上寫 0。",
+    "caveat": "上游分區為什麼是空的（可能與 CDC 同步重試有關）還沒有確認，這部分是推論；儀表板的行為則有 log 佐證。",
+    "truth": "orders_raw 的 2026-08-17 分區為空，daily_orders_agg 的 rowcount 驗證正確地失敗；但 dashboard_refresh 不檢查上游狀態，06:00 仍以 8/16 分區刷新並回報 OK，8/17 因此顯示為 0。"
+  },
+  "language": "zh-TW",
+  "mode": "incident",
+  "mode_data": {
+    "contributing_factors": [
+      "上游 8/17 分區為空（原因待上游確認，可能與 CDC 重試有關）",
+      "儀表板沒有區分「無資料」與「0」"
+    ],
+    "root_cause": {
+      "evidence": [
+        "e_log",
+        "e_notes"
+      ],
+      "status": "verified",
+      "text": "刷新流程與聚合 job 之間沒有狀態相依：聚合失敗不會阻止刷新，缺資料被呈現成 0。"
+    },
+    "timeline": [
+      {
+        "event": "daily_orders_agg 開始處理 8/17 分區",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "normal",
+        "t": "2026-08-18T02:03:11+08:00"
+      },
+      {
+        "event": "rowcount 驗證失敗：8/17 分區為空，job 停止",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "first_break",
+        "t": "2026-08-18T02:10:02+08:00"
+      },
+      {
+        "event": "dashboard_refresh 用 8/16 分區刷新並回報 OK",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "normal",
+        "t": "2026-08-18T06:00:15+08:00"
+      },
+      {
+        "event": "分析師發現 8/17 營收顯示 0，人工通報",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "detection",
+        "t": "2026-08-18T09:31:40+08:00"
+      },
+      {
+        "event": "回補 8/17 分區（51,873 列）",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "mitigation",
+        "t": "2026-08-18T10:15:22+08:00"
+      },
+      {
+        "event": "儀表板以 8/17 分區重新刷新，數字恢復",
+        "evidence": [
+          "e_log"
+        ],
+        "kind": "recovery",
+        "t": "2026-08-18T11:01:55+08:00"
+      }
+    ]
+  },
+  "one_liner": "上游那天的資料沒送到，儀表板卻照常刷新，所以把「沒資料」畫成了 0。",
+  "scenes": [
+    {
+      "caption": "三段接力：上游同步、每日聚合、儀表板刷新。",
+      "edges": [
+        {
+          "from": "n_raw",
+          "label": "讀取分區",
+          "to": "n_agg"
+        },
+        {
+          "from": "n_agg",
+          "label": "應該提供 8/17",
+          "to": "n_dash"
+        }
+      ],
+      "id": "s_flow",
+      "nodes": [
+        {
+          "evidence": [
+            "e_log",
+            "e_cdc"
+          ],
+          "id": "n_raw",
+          "label": "orders_raw 上游分區",
+          "note": "8/17 分區 rows=0。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_log"
+          ],
+          "id": "n_agg",
+          "label": "daily_orders_agg 聚合",
+          "note": "rowcount 驗證失敗，job 正確停下。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_log",
+            "e_notes"
+          ],
+          "id": "n_dash",
+          "label": "dashboard_refresh 刷新",
+          "note": "不看上游狀態，用 8/16 分區刷新。",
+          "status": "verified"
+        }
+      ],
+      "title": "資料是怎麼流到儀表板的"
+    },
+    {
+      "caption": "聚合 job 擋下壞資料是對的；問題是刷新流程不知道它擋下了。",
+      "edges": [
+        {
+          "from": "n_guard",
+          "label": "沒有通知",
+          "to": "n_blind"
+        },
+        {
+          "from": "n_blind",
+          "label": "導致",
+          "to": "n_zero"
+        }
+      ],
+      "id": "s_gap",
+      "nodes": [
+        {
+          "evidence": [
+            "e_log"
+          ],
+          "id": "n_guard",
+          "label": "驗證擋下空分區（正確）",
+          "note": "validate_rowcount failed。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_log",
+            "e_notes"
+          ],
+          "id": "n_blind",
+          "label": "刷新流程看不到失敗",
+          "note": "log 顯示 refresh 仍 status=OK。",
+          "status": "verified"
+        },
+        {
+          "evidence": [
+            "e_notes"
+          ],
+          "id": "n_zero",
+          "label": "儀表板把缺資料畫成 0",
+          "note": "沒有 8/17 的列，圖表預設補 0。",
+          "status": "inferred"
+        }
+      ],
+      "title": "斷點在哪裡"
+    }
+  ],
+  "teach_back": [
+    {
+      "answer": "因為刷新只檢查自己有沒有跑完，沒檢查上游聚合是否失敗，所以拿舊分區刷新也回報 OK。",
+      "question": "聚合 job 失敗了，為什麼儀表板還顯示成功？"
+    },
+    {
+      "answer": "刷新前檢查上游 job 狀態，失敗時顯示「資料未更新」，而不是把缺的那天補成 0。",
+      "question": "下次要怎麼一眼分辨「沒資料」和「真的 0」？"
+    }
+  ],
+  "title": "為什麼 8/17 的營收儀表板顯示 0",
+  "trace": [
+    {
+      "node": "n_raw",
+      "scene": "s_flow",
+      "step": 1,
+      "text": "02:09 發現 8/17 分區是空的（rows=0）。"
+    },
+    {
+      "node": "n_agg",
+      "scene": "s_flow",
+      "step": 2,
+      "text": "02:10 聚合 job 的 rowcount 驗證失敗，job 停止。"
+    },
+    {
+      "node": "n_dash",
+      "scene": "s_flow",
+      "step": 3,
+      "text": "06:00 儀表板照常刷新，用的是 8/16 分區。"
+    },
+    {
+      "node": "n_blind",
+      "scene": "s_gap",
+      "step": 4,
+      "text": "刷新流程沒有檢查上游是否失敗，回報 OK。"
+    },
+    {
+      "node": "n_zero",
+      "scene": "s_gap",
+      "step": 5,
+      "text": "8/17 沒有資料列，圖表畫成 0，看起來像營收歸零。"
+    }
+  ],
+  "version": 1
+}

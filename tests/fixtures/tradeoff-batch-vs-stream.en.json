@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "language": "en",
+  "mode": "tradeoff",
+  "title": "Daily batch or streaming for the order report",
+  "audience": "Product managers new to data pipelines",
+  "one_liner": "Batch gives one final number a day; streaming gives a number that keeps changing.",
+  "analogy": {
+    "text": "Batch is like counting the cash drawer once after closing. Streaming is like watching the register total tick up all day.",
+    "limits": "A register total is always right for that moment; a streaming metric can be revised later when late events arrive."
+  },
+  "ladder": {
+    "analogy": "Count once at closing, or watch the total tick all day.",
+    "truth": "ADR-0007 keeps the daily order report on batch aggregation because finance needs a fixed end-of-day number that can be recomputed before reconciliation; streaming is used only for alert dashboards.",
+    "caveat": "The batch report is only available the next morning around 06:00, so intraday anomalies must be caught by alerts instead."
+  },
+  "scenes": [
+    {
+      "id": "s_options",
+      "title": "Two ways to get a number",
+      "caption": "Both read the same orders; they differ in when the number is considered final.",
+      "nodes": [
+        {"id": "n_orders", "label": "Orders as they happen", "status": "inferred", "note": "Each order is an event with a paid or unpaid status.", "evidence": ["e_events"]},
+        {"id": "n_batch", "label": "Daily batch: final number at 06:00", "status": "verified", "note": "Recomputed before reconciliation if needed.", "evidence": ["e_adr"]},
+        {"id": "n_stream", "label": "Streaming: number that keeps moving", "status": "verified", "note": "Used only for alert dashboards.", "evidence": ["e_adr"]}
+      ],
+      "edges": [
+        {"from": "n_orders", "to": "n_batch", "label": "once a day"},
+        {"from": "n_orders", "to": "n_stream", "label": "continuously"}
+      ]
+    }
+  ],
+  "failure_lens": [
+    {"id": "f_late", "what_breaks": "Late-arriving events after the batch has run", "symptom": "Yesterday's number changes after finance already used it", "status": "inferred", "evidence": ["e_events"]}
+  ],
+  "teach_back": [
+    {"question": "Why not stream everything if it is faster?", "answer": "Finance needs a number that stops changing; a streaming total keeps moving as late events arrive, so it cannot be the reconciliation baseline."}
+  ],
+  "glossary": [
+    {"term": "reconciliation", "plain": "Checking that the report matches the money that actually arrived."}
+  ],
+  "evidence": [
+    {
+      "id": "e_adr",
+      "status": "verified",
+      "claim": "The daily order report stays on batch aggregation; streaming is only for real-time alert dashboards",
+      "locator": "docs/adr-0007-batch-vs-stream.md",
+      "quote": "訂單日報維持每日批次聚合；串流只用於即時告警看板"
+    },
+    {
+      "id": "e_events",
+      "status": "inferred",
+      "claim": "Orders arrive as events and some arrive late",
+      "reasoning": "Typical of order pipelines with retries; no late-event measurement was collected for this report."
+    }
+  ],
+  "mode_data": {
+    "options": [
+      {"id": "o_batch", "name": "Daily batch", "gains": ["One final number per day", "Can be recomputed before reconciliation"], "costs": ["Available only the next morning"], "nodes": ["n_batch"]},
+      {"id": "o_stream", "name": "Streaming", "gains": ["Numbers within minutes"], "costs": ["Totals keep changing", "Not a reconciliation baseline"], "nodes": ["n_stream"]}
+    ],
+    "decision_rule": "If a number must stop changing before someone signs off on it, use batch; if a number only needs to trigger an alert, use streaming.",
+    "recommendation": {
+      "option": "o_batch",
+      "status": "verified",
+      "because": "Finance reconciliation needs a fixed end-of-day figure, which ADR-0007 records as the deciding reason.",
+      "evidence": ["e_adr"]
+    }
+  }
+}
