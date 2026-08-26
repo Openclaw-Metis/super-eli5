@@ -7,10 +7,13 @@
 - Content-Security-Policy 以 style 區塊的 SHA-256 鎖定，瀏覽器會拒絕被竄改的樣式。
 - canonical spec JSON 以 HTML escape 內嵌在 pre#super-eli5-spec，並在 meta 記錄 spec SHA-256，
   供 verify_artifact.py 做配對驗證與竄改偵測。
+- 可見的檢驗等級來自本次 validate 結果，另以雜湊鎖定的 verification manifest 內嵌；
+  renderer 不採信 spec 自己宣告的 verification 欄位。
 - 證據 URL 允許以連結呈現（讀者可自行點開），本機路徑只以文字呈現，不會被自動讀取。
 
 用法：
   python scripts/render_html.py spec.json out.html
+  python scripts/render_html.py spec.json out.html --source-root ./sources --check-quotes
   python scripts/render_html.py spec.json out.html --force            # 明確允許覆寫
   python scripts/render_html.py spec.json out.html --workspace ./out  # 限制輸出只能落在此目錄內
 
@@ -35,11 +38,13 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_spec import canonical_json, classify_locator, configure_stdout, load_spec, spec_sha256, validate_spec  # noqa: E402
+from validate_spec import VERIFICATION_LEVELS, canonical_json, classify_locator, configure_stdout, load_spec, spec_sha256, validate_spec  # noqa: E402
 
-RENDERER_VERSION = "1.0.0"
+RENDERER_VERSION = "1.1.0"
 SPEC_PRE_ID = "super-eli5-spec"
+VERIFICATION_PRE_ID = "super-eli5-verification"
 META_SPEC_HASH = "super-eli5-spec-sha256"
+META_VERIFICATION_HASH = "super-eli5-verification-sha256"
 META_STYLE_HASH = "super-eli5-style-sha256"
 META_RENDERER = "super-eli5-renderer"
 
@@ -84,7 +89,7 @@ UI: dict[str, dict[str, Any]] = {
         "evidence": "證據表",
         "cols": {"id": "編號", "status": "等級", "claim": "主張", "locator": "來源", "quote": "引述", "immutable": "不可變識別", "verification": "檢驗等級", "reasoning": "推論理由"},
         "verification": {"structural": "結構", "content-bound": "內容綁定", "quote-checked": "引述已核對", "none": "未核對"},
-        "immutable": {"commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "讀取於"},
+        "immutable": {"repo_url": "repo", "commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "讀取於"},
         "concept": {"title": "常見誤解", "myth": "迷思", "reality": "實際上"},
         "module": {"title": "模組邊界", "entry": "入口", "exit": "出口", "inputs": "輸入", "outputs": "輸出", "source_root": "程式根目錄"},
         "tradeoff": {"title": "方案比較", "option": "方案", "gains": "得到", "costs": "付出", "decision_rule": "怎麼選", "recommendation": "建議", "because": "因為"},
@@ -124,7 +129,7 @@ UI: dict[str, dict[str, Any]] = {
         "evidence": "证据表",
         "cols": {"id": "编号", "status": "等级", "claim": "主张", "locator": "来源", "quote": "引述", "immutable": "不可变标识", "verification": "检验等级", "reasoning": "推论理由"},
         "verification": {"structural": "结构", "content-bound": "内容绑定", "quote-checked": "引述已核对", "none": "未核对"},
-        "immutable": {"commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "读取于"},
+        "immutable": {"repo_url": "repo", "commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "读取于"},
         "concept": {"title": "常见误解", "myth": "迷思", "reality": "实际上"},
         "module": {"title": "模块边界", "entry": "入口", "exit": "出口", "inputs": "输入", "outputs": "输出", "source_root": "代码根目录"},
         "tradeoff": {"title": "方案比较", "option": "方案", "gains": "得到", "costs": "付出", "decision_rule": "怎么选", "recommendation": "建议", "because": "因为"},
@@ -164,7 +169,7 @@ UI: dict[str, dict[str, Any]] = {
         "evidence": "Evidence table",
         "cols": {"id": "ID", "status": "Status", "claim": "Claim", "locator": "Source", "quote": "Quote", "immutable": "Immutable ref", "verification": "Check level", "reasoning": "Reasoning"},
         "verification": {"structural": "structural", "content-bound": "content-bound", "quote-checked": "quote-checked", "none": "not checked"},
-        "immutable": {"commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "retrieved"},
+        "immutable": {"repo_url": "repo", "commit_sha": "commit", "content_sha256": "sha256", "retrieved_at": "retrieved"},
         "concept": {"title": "Common misconceptions", "myth": "Myth", "reality": "Reality"},
         "module": {"title": "Module boundary", "entry": "Entry", "exit": "Exit", "inputs": "Inputs", "outputs": "Outputs", "source_root": "Source root"},
         "tradeoff": {"title": "Option comparison", "option": "Option", "gains": "Gains", "costs": "Costs", "decision_rule": "How to choose", "recommendation": "Recommendation", "because": "Because"},
@@ -431,6 +436,8 @@ def _locator_html(locator: str | None) -> str:
 
 def _immutable_html(item: dict[str, Any], ui: dict[str, Any]) -> str:
     bits: list[str] = []
+    if item.get("repo_url"):
+        bits.append(f'{esc(ui["immutable"]["repo_url"])} <code>{esc(item["repo_url"])}</code>')
     if item.get("commit_sha"):
         bits.append(f'{esc(ui["immutable"]["commit_sha"])} <code>{esc(item["commit_sha"][:12])}</code>')
     if item.get("content_sha256"):
@@ -608,7 +615,7 @@ def _render_mode_panel(spec: dict[str, Any], ui: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _render_evidence(spec: dict[str, Any], ui: dict[str, Any]) -> str:
+def _render_evidence(spec: dict[str, Any], ui: dict[str, Any], verification_levels: dict[str, str]) -> str:
     cols = ui["cols"]
     parts = [
         '<section class="evidence">',
@@ -620,7 +627,7 @@ def _render_evidence(spec: dict[str, Any], ui: dict[str, Any]) -> str:
     for item in spec["evidence"]:
         status = item["status"]
         quote_or_reason = item.get("quote") if status == "verified" else item.get("reasoning") or item.get("note") or ""
-        level = item.get("verification") if status == "verified" else None
+        level = verification_levels.get(item["id"]) if status == "verified" else None
         level_text = ui["verification"][level] if level else ("" if status != "verified" else ui["verification"]["none"])
         parts.append(
             f'<tr id="ev-{esc(item["id"])}"><td><code>{esc(item["id"])}</code></td><td class="status-{esc(status)}">{esc(ui["status"][status])}</td>'
@@ -648,12 +655,29 @@ def _render_footer(spec_hash: str, ui: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render(spec: dict[str, Any]) -> str:
-    """把已驗證的 spec 決定性地編譯成單檔 HTML 字串。"""
+def _effective_verification(spec: dict[str, Any], levels: dict[str, str] | None) -> dict[str, str]:
+    """建立 renderer 本次採用的等級；未提供 attestation 時一律降為 structural。"""
+
+    verified_ids = {item["id"] for item in spec.get("evidence", []) if item.get("status") == "verified"}
+    supplied = levels or {}
+    unknown = set(supplied) - verified_ids
+    if unknown:
+        raise ValueError(f"verification_levels 含未知或非 verified evidence：{', '.join(sorted(unknown))}")
+    invalid = {level for level in supplied.values() if level not in VERIFICATION_LEVELS}
+    if invalid:
+        raise ValueError(f"verification_levels 含無效等級：{', '.join(sorted(invalid))}")
+    return {evidence_id: supplied.get(evidence_id, "structural") for evidence_id in sorted(verified_ids)}
+
+
+def render(spec: dict[str, Any], *, verification_levels: dict[str, str] | None = None) -> str:
+    """把已驗證的 spec 決定性地編譯成單檔 HTML；顯示等級只採用本次工具 attestation。"""
 
     ui = UI[spec["language"]]
     canonical = canonical_json(spec)
     spec_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    effective_levels = _effective_verification(spec, verification_levels)
+    verification_manifest = canonical_json({"version": 1, "levels": effective_levels})
+    verification_hash = hashlib.sha256(verification_manifest.encode("utf-8")).hexdigest()
     head = "\n".join(
         [
             "<!DOCTYPE html>",
@@ -665,6 +689,7 @@ def render(spec: dict[str, Any]) -> str:
             '<meta name="referrer" content="no-referrer">',
             f'<meta name="{META_RENDERER}" content="{RENDERER_VERSION}">',
             f'<meta name="{META_SPEC_HASH}" content="{spec_hash}">',
+            f'<meta name="{META_VERIFICATION_HASH}" content="{verification_hash}">',
             f'<meta name="{META_STYLE_HASH}" content="{STYLE_SHA256_HEX}">',
             f"<title>{esc(spec['title'])}</title>",
             f"<style>{CSS}</style>",
@@ -684,10 +709,11 @@ def render(spec: dict[str, Any]) -> str:
             _render_teach(spec, ui),
             _render_glossary(spec, ui),
             _render_mode_panel(spec, ui),
-            _render_evidence(spec, ui),
+            _render_evidence(spec, ui, effective_levels),
             _render_footer(spec_hash, ui),
             "</main>",
             f'<pre hidden id="{SPEC_PRE_ID}">{esc(canonical)}</pre>',
+            f'<pre hidden id="{VERIFICATION_PRE_ID}">{esc(verification_manifest)}</pre>',
             "</body>",
             "</html>",
         ]
@@ -744,9 +770,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("output", help="輸出 HTML 路徑")
     parser.add_argument("--force", action="store_true", help="允許覆寫既有輸出檔")
     parser.add_argument("--workspace", type=Path, default=Path.cwd(), help="輸出必須位於此目錄之內（預設：目前工作目錄）")
+    parser.add_argument("--source-root", type=Path, default=None, help="本機來源根目錄；提供後重新計算內容綁定等級")
+    parser.add_argument("--check-quotes", action="store_true", help="核對 verified quote；需要 --source-root")
     parser.add_argument("--json", action="store_true", help="以 JSON 輸出結果")
     args = parser.parse_args(argv)
     configure_stdout()
+    if args.check_quotes and args.source_root is None:
+        parser.error("--check-quotes 需要同時提供 --source-root")
 
     report: dict[str, Any] = {"renderer_version": RENDERER_VERSION, "status": "FAIL", "output": args.output}
     try:
@@ -755,7 +785,7 @@ def main(argv: list[str] | None = None) -> int:
         report["error"] = f"spec_unreadable: {exc}"
         print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else f"FAIL {report['error']}")
         return 1
-    validation = validate_spec(spec)
+    validation = validate_spec(spec, source_root=args.source_root, check_quotes=args.check_quotes)
     if not validation.ok:
         report["error"] = "spec_invalid"
         report["validation"] = validation.as_dict()
@@ -766,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
             for item in validation.errors:
                 print(f"  ERROR {item.code}: {item.message}")
         return 1
-    html_text = render(spec)
+    html_text = render(spec, verification_levels=validation.verification)
     try:
         write_text_atomic(Path(args.output), html_text, force=args.force, workspace=args.workspace)
     except (OSError, PermissionError) as exc:
@@ -780,6 +810,7 @@ def main(argv: list[str] | None = None) -> int:
             "style_sha256": STYLE_SHA256_HEX,
             "html_sha256": hashlib.sha256(html_text.encode("utf-8")).hexdigest(),
             "bytes": len(html_text.encode("utf-8")),
+            "verification": dict(sorted(validation.verification.items())),
             "warnings": [item.as_dict() for item in validation.warnings],
         }
     )

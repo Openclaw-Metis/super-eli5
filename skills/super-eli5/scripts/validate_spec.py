@@ -9,7 +9,7 @@
 3. 證據：analogy / inferred / verified 三層真相的 provenance 規則。
 
 `verified` 在這裡有三個檢驗等級，等級只會由實際檢查結果決定，不會憑宣告升級：
-- structural：locator、quote 與不可變識別（commit_sha / content_sha256 / retrieved_at）都存在。
+- structural：locator、quote 與可重現內容識別（content_sha256，或 repo_url + 完整 commit_sha）都存在。
 - content-bound：本機來源檔案的 SHA-256 與 content_sha256 相符。
 - quote-checked：quote 真的出現在來源檔案（若有 line_start / line_end，則限定在該範圍）。
 
@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 SPEC_VERSION = 1
-VALIDATOR_VERSION = "1.0.0"
+VALIDATOR_VERSION = "1.1.0"
 
 LANGUAGES = ("zh-TW", "zh-CN", "en")
 MODES = ("concept", "module", "tradeoff", "incident", "metric")
@@ -51,7 +51,7 @@ INCIDENT_KINDS = ("normal", "first_break", "detection", "mitigation", "recovery"
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
+COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 URL_PATTERN = re.compile(r"^https?://[^\s<>\"']+$", re.IGNORECASE)
 ABSOLUTE_PATH_PATTERN = re.compile(r"^(?:/|\\\\|[A-Za-z]:[\\/]|~)")
@@ -296,7 +296,7 @@ def _validate_evidence(result: ValidationResult, spec: dict[str, Any], *, defer_
         if not isinstance(item, dict):
             result.error("evidence_type", f"{path} 必須是物件", path)
             continue
-        allowed = {"id", "status", "claim", "locator", "quote", "retrieved_at", "commit_sha", "content_sha256", "line_start", "line_end", "reasoning", "note", "verification"}
+        allowed = {"id", "status", "claim", "locator", "quote", "retrieved_at", "repo_url", "commit_sha", "content_sha256", "line_start", "line_end", "reasoning", "note", "verification"}
         unknown = sorted(set(item) - allowed)
         if unknown:
             result.error("evidence_unknown_field", f"{path} 含未定義欄位：{', '.join(unknown)}", path)
@@ -323,7 +323,12 @@ def _validate_evidence(result: ValidationResult, spec: dict[str, Any], *, defer_
                 result.error("retrieved_at_invalid", f"{path}.retrieved_at 必須是 ISO 8601 日期或時間", path)
         if item.get("commit_sha") is not None:
             if not _is_text(item["commit_sha"]) or not COMMIT_PATTERN.match(item["commit_sha"]):
-                result.error("commit_sha_invalid", f"{path}.commit_sha 必須是 7 到 64 位小寫十六進位", path)
+                result.error("commit_sha_invalid", f"{path}.commit_sha 必須是完整 40 位小寫十六進位 Git commit SHA", path)
+        if item.get("repo_url") is not None:
+            if not _is_text(item["repo_url"]) or classify_locator(item["repo_url"]) != "url":
+                result.error("repo_url_invalid", f"{path}.repo_url 必須是 http(s) repository URL", path)
+        if bool(item.get("commit_sha")) != bool(item.get("repo_url")):
+            result.error("git_identity_incomplete", f"{path}.commit_sha 與 repo_url 必須成對出現", path)
         if item.get("content_sha256") is not None:
             if not _is_text(item["content_sha256"]) or not SHA256_PATTERN.match(item["content_sha256"]):
                 result.error("content_sha256_invalid", f"{path}.content_sha256 必須是 64 位小寫十六進位", path)
@@ -341,7 +346,7 @@ def _validate_evidence(result: ValidationResult, spec: dict[str, Any], *, defer_
             result.error("verification_invalid", f"{path}.verification 必須是 {', '.join(VERIFICATION_LEVELS)} 之一", path)
 
         if status == "verified":
-            immutable = any(item.get(key) for key in ("commit_sha", "content_sha256", "retrieved_at"))
+            immutable = bool(item.get("content_sha256")) or bool(item.get("commit_sha") and item.get("repo_url"))
             if locator is None:
                 result.error("verified_locator_missing", f"{path} 是 verified，必須有 locator", path)
             if not item.get("quote"):
@@ -349,11 +354,13 @@ def _validate_evidence(result: ValidationResult, spec: dict[str, Any], *, defer_
             if not immutable and not (defer_immutable_for_paths and locator_kind == "path"):
                 result.error(
                     "verified_immutable_ref_missing",
-                    f"{path} 是 verified，必須至少有 commit_sha、content_sha256 或 retrieved_at 之一，否則來源改變後無法察覺",
+                    f"{path} 是 verified，必須有 content_sha256，或 repo_url 搭配完整 commit_sha；retrieved_at 只能記錄時間，不能識別內容",
                     path,
                 )
             if locator_kind == "url" and not item.get("retrieved_at"):
                 result.error("verified_url_retrieved_at_missing", f"{path} 的 URL 來源必須記錄 retrieved_at", path)
+            if locator_kind == "url" and not immutable:
+                result.error("verified_url_content_identity_missing", f"{path} 的 URL 來源必須記錄 content_sha256，或 repo_url 搭配完整 commit_sha", path)
             if verification in ("content-bound", "quote-checked") and not item.get("content_sha256"):
                 result.error("verification_claim_unbound", f"{path} 宣告 {verification} 卻沒有 content_sha256", path)
         elif status == "inferred":
@@ -364,7 +371,7 @@ def _validate_evidence(result: ValidationResult, spec: dict[str, Any], *, defer_
         elif status == "analogy":
             if verification is not None:
                 result.error("verification_not_applicable", f"{path} 不是 verified，不應有 verification 欄位", path)
-            if item.get("content_sha256") or item.get("commit_sha"):
+            if item.get("content_sha256") or item.get("commit_sha") or item.get("repo_url"):
                 result.warn("analogy_with_immutable_ref", f"{path} 是類比，卻帶有不可變識別；請確認它不是被降級的事實", path)
 
         if item_id is not None:
@@ -936,7 +943,7 @@ def validate_spec(spec: Any, *, source_root: Path | None = None, check_quotes: b
         check_local_evidence(spec, source_root, check_quotes=check_quotes, bind=bind, result=result)
         if bind:
             for index, item in enumerate(spec.get("evidence", []) or []):
-                if isinstance(item, dict) and item.get("status") == "verified" and not any(item.get(key) for key in ("commit_sha", "content_sha256", "retrieved_at")):
+                if isinstance(item, dict) and item.get("status") == "verified" and not (item.get("content_sha256") or (item.get("commit_sha") and item.get("repo_url"))):
                     result.error("verified_immutable_ref_missing", f"evidence[{index}] 綁定後仍沒有不可變識別；來源檔案不存在或無法讀取", f"evidence[{index}]")
     return result
 

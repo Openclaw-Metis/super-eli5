@@ -8,10 +8,10 @@
     {
       "claim": "p 值衡量資料與指定統計模型的不相容程度，不是假設為真的機率，也不衡量效果大小",
       "id": "e_asa",
-      "locator": "https://doi.org/10.1080/00031305.2016.1154108",
+      "content_sha256": "b0fe0e69c2ab57874049313366b182196c0ca18e9cdf60183bcf384e984efd0e",
+      "locator": "concept/asa-p-value-statement.txt",
       "note": "美國統計學會 2016 年 p 值聲明的六項原則之一。",
       "quote": "P-values can indicate how incompatible the data are with a specified statistical model.",
-      "retrieved_at": "2026-08-25",
       "status": "verified"
     },
     {

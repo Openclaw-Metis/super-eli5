@@ -47,7 +47,8 @@
       "claim": "《這筆證據支持的主張》",
       "locator": "《相對路徑或 http(s) URL》",
       "quote": "《逐字短引述》",
-      "retrieved_at": "《URL 來源必填：2026-08-25》"
+      "retrieved_at": "《URL 來源必填：2026-08-25》",
+      "content_sha256": "《URL 來源必填；本機來源由 --bind 寫入的 64 位 SHA-256》"
     }
   ],
   "mode_data": {

@@ -106,7 +106,7 @@
       "expected_output": "不觸發 super-eli5；交給 technical-documentation-writer。",
       "files": [],
       "expectations": [
-        "不產生六層解說",
+        "不產生 super-eli5 固定六層解說結構",
         "不執行任何 super-eli5 scripts"
       ]
     },
@@ -137,7 +137,7 @@
       "files": [],
       "expectations": [
         "只要畫圖、不要解說時不觸發",
-        "不產生類比或證據表"
+        "不產生 super-eli5 的類比、失真點或證據表"
       ]
     },
     {
@@ -145,13 +145,13 @@
       "name": "tone-rewrite-overlap-neighbor",
       "type": "trigger",
       "language": "zh",
-      "trigger_class": "indirect",
+      "trigger_class": "negative",
       "coverage_tags": ["overlap-neighbor", "should-not-trigger", "near-miss"],
       "prompt": "這段給主管的 email 術語太多，幫我改自然一點，內容不要動。",
       "expected_output": "不觸發 super-eli5；交給 humanize-text，因為使用者要的是語氣改寫而非重新解說。",
       "files": [],
       "expectations": [
-        "不重寫成六層結構",
+        "不重寫成 super-eli5 固定六層輸出結構",
         "不加入類比或失效鏡頭"
       ]
     },

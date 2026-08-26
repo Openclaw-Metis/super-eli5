@@ -47,8 +47,8 @@ def check_example(path: Path, workdir: Path) -> dict[str, Any]:
         entry["status"] = "FAIL"
         entry["problems"].extend(f"{item.code}: {item.message}" for item in validation.errors)
         return entry
-    first = render(spec)
-    second = render(spec)
+    first = render(spec, verification_levels=validation.verification)
+    second = render(spec, verification_levels=validation.verification)
     if first != second:
         entry["status"] = "FAIL"
         entry["problems"].append("render_not_deterministic")

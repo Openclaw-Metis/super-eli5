@@ -58,8 +58,9 @@
 | `locator` | verified 必填；http(s) URL 或相對 POSIX 路徑 |
 | `quote` | verified 必填，最多 240，逐字 |
 | `retrieved_at` | ISO 8601；URL 來源的 verified 必填 |
-| `commit_sha` | 7 至 64 位小寫十六進位 |
-| `content_sha256` | 64 位小寫十六進位；`--bind` 自動填 |
+| `repo_url` | http(s) repository URL；與 `commit_sha` 成對出現 |
+| `commit_sha` | 完整 40 位小寫十六進位 Git commit SHA；與 `repo_url` 成對出現 |
+| `content_sha256` | 來源 bytes 的 64 位小寫十六進位 SHA-256；本機來源由 `--bind` 自動填；verified URL 必填（除非已有 repo_url + commit_sha） |
 | `line_start` / `line_end` | 成對出現，`1 <= start <= end`；quote 必須落在範圍內 |
 | `reasoning` | inferred 必填，最多 300 |
 | `note` | 可選，最多 200 |
@@ -84,5 +85,6 @@
 3. 不含 script、iframe、object、embed、form、link、base、img、video、audio、inline `style=` 屬性、`on*` 事件屬性、`javascript:`、meta refresh、`src=`；CSS 內不含 `@import` 或外部 `url()`。
 4. 所有 `href` 只能是頁內錨點，或內嵌 spec 的 evidence 內宣告過的 http(s) locator（帶 `rel="noopener noreferrer"`）。
 5. `pre#super-eli5-spec` 內嵌 HTML-escaped 的 canonical spec；`meta[name=super-eli5-spec-sha256]` 等於 canonical JSON（`sort_keys`、緊湊分隔、UTF-8）的 SHA-256。
-6. 同一份 spec 重新 render 必須 byte-for-byte 相同；提供 `--spec` 時 verifier 會實際重 render 比對。
-7. 輸出沒有時間戳、隨機值或環境資訊；檢驗等級只會顯示 spec 內由 `--bind` 寫入的值。
+6. `pre#super-eli5-verification` 內嵌本次工具產生的 evidence→level manifest；其 canonical hash 寫在 `meta[name=super-eli5-verification-sha256]`。renderer 不採信 spec 自行宣告的等級。
+7. 同一份 spec 與 verification manifest 重新 render 必須 byte-for-byte 相同；verifier 不需外部 `--spec` 就會重建比對，提供 `--spec` 時再額外確認配對。
+8. 輸出沒有時間戳、隨機值或環境資訊。

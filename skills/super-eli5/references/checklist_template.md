@@ -18,7 +18,7 @@
 - 推論在文字中是否聽得出是推論？根因、定義、建議是否沒有類比混入？
 
 ## 證據審查
-- 每筆 verified 是否真的打開過來源？quote 是否逐字？URL 是否有 retrieved_at？
+- 每筆 verified 是否真的打開過來源？quote 是否逐字？URL 是否有 retrieved_at 與內容 hash？Git 證據是否有 repo_url 與完整 commit SHA？
 - `--bind` 後的檢驗等級是否與交付訊息一致？
 - locator 與 quote 是否含使用者名稱、絕對路徑、內部主機名或機密數字？
 

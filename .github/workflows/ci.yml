@@ -25,6 +25,8 @@ jobs:
           python-version: "3.12"
       - name: Compile scripts
         run: python -m py_compile skills/super-eli5/scripts/validate_spec.py skills/super-eli5/scripts/render_html.py skills/super-eli5/scripts/verify_artifact.py skills/super-eli5/scripts/self_check.py
+      - name: Release contract
+        run: python tests/release_contract.py --json
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Self check bundled examples

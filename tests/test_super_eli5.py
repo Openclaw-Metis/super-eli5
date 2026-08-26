@@ -69,6 +69,7 @@ def minimal_concept_spec(language: str = "zh-TW") -> dict:
                 "locator": "https://example.org/docs/cache",
                 "quote": "A cache hit serves the response without contacting the origin.",
                 "retrieved_at": "2026-08-25T10:00:00+08:00",
+                "content_sha256": "0" * 64,
             },
             {"id": "e_note", "status": "analogy", "claim": "便利貼只是比喻", "note": "比喻用。"},
         ],
@@ -121,14 +122,27 @@ class ValidatorContractTests(unittest.TestCase):
             spec["evidence"][0]["locator"] = locator
             self.assertIn("locator_invalid", error_codes(vs.validate_spec(spec)), locator)
 
-    def test_verified_requires_quote_immutable_ref_and_url_retrieved_at(self) -> None:
+    def test_verified_requires_quote_snapshot_identity_and_url_retrieved_at(self) -> None:
         spec = minimal_concept_spec()
         del spec["evidence"][0]["quote"]
         del spec["evidence"][0]["retrieved_at"]
+        del spec["evidence"][0]["content_sha256"]
         codes = error_codes(vs.validate_spec(spec))
         self.assertIn("verified_quote_missing", codes)
         self.assertIn("verified_immutable_ref_missing", codes)
         self.assertIn("verified_url_retrieved_at_missing", codes)
+        self.assertIn("verified_url_content_identity_missing", codes)
+
+    def test_git_identity_requires_repo_and_full_commit_sha(self) -> None:
+        spec = minimal_concept_spec()
+        spec["evidence"][0]["commit_sha"] = "abcdef0"
+        codes = error_codes(vs.validate_spec(spec))
+        self.assertIn("commit_sha_invalid", codes)
+        self.assertIn("git_identity_incomplete", codes)
+
+        spec["evidence"][0]["commit_sha"] = "a" * 40
+        spec["evidence"][0]["repo_url"] = "https://github.com/example/project"
+        self.assertTrue(vs.validate_spec(spec).ok, vs.validate_spec(spec).as_dict())
 
     def test_verified_node_needs_verified_evidence(self) -> None:
         spec = minimal_concept_spec()
@@ -317,8 +331,35 @@ class RenderAndVerifyTests(unittest.TestCase):
         self.assertEqual(first, second)
         report = va.verify_html(first, spec)
         self.assertEqual(report["status"], "PASS", report)
+        self.assertTrue(report["reproduction"]["byte_identical"])
         self.assertTrue(report["pair"]["byte_identical"])
         self.assertNotIn("<script", first.lower())
+
+    def test_renderer_ignores_self_declared_verification_level(self) -> None:
+        spec = minimal_concept_spec()
+        spec["evidence"][0]["content_sha256"] = "0" * 64
+        spec["evidence"][0]["verification"] = "quote-checked"
+        html_text = render_html.render(spec)
+        self.assertIn('<td>結構</td>', html_text)
+        self.assertEqual(va.verify_html(html_text)["status"], "PASS")
+
+    def test_renderer_cli_displays_only_levels_checked_this_run(self) -> None:
+        source_root = FIXTURES / "sources"
+        spec = vs.load_spec(FIXTURES / "module-daily-orders.zh-TW.json")
+        source = source_root / "pipeline" / "daily_orders.py"
+        spec["evidence"][0]["content_sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+        spec["evidence"][0]["verification"] = "quote-checked"
+        spec_path = self.root / "module.json"
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+        out = self.root / "module.html"
+        with _captured_stdout():
+            code = render_html.main(
+                [str(spec_path), str(out), "--workspace", str(self.root), "--source-root", str(source_root), "--check-quotes", "--json"]
+            )
+        self.assertEqual(code, 0)
+        html_text = out.read_bytes().decode("utf-8")
+        self.assertIn('<td>引述已核對</td>', html_text)
+        self.assertEqual(va.verify_html(html_text)["status"], "PASS")
 
     def test_hostile_text_stays_inert(self) -> None:
         spec = minimal_concept_spec()
@@ -340,6 +381,9 @@ class RenderAndVerifyTests(unittest.TestCase):
         edited = html_text.replace("快取就是把常用的答案先抄一份放在手邊。", "快取永遠正確。", 1)
         self.assertNotEqual(edited, html_text)
         self.assertEqual(va.verify_html(edited, spec)["status"], "FAIL")
+        standalone = va.verify_html(edited)
+        self.assertEqual(standalone["status"], "FAIL")
+        self.assertIn("embedded_render_mismatch", {item["code"] for item in standalone["findings"]})
         injected = html_text.replace("</main>", '<script>alert(1)</script></main>', 1)
         codes = {item["code"] for item in va.verify_html(injected)["findings"]}
         self.assertIn("script_tag", codes)

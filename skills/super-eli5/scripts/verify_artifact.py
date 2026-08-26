@@ -3,11 +3,12 @@
 
 檢查項目：
 1. 只有一個 style 區塊，且其 SHA-256 同時符合 meta 記錄、CSP 的 style-src hash 與 renderer 內建樣式。
-2. 內嵌的 canonical spec 可以還原、可通過 validate_spec，且 SHA-256 符合 meta 記錄。
+2. 內嵌的 canonical spec 與 verification manifest 可以還原、通過驗證，且 SHA-256 符合 meta 記錄。
 3. 不含 script、iframe、object、embed、form、link、base、img/video/audio、inline style 屬性、
    on* 事件屬性、javascript: URL、meta refresh；style 內不含 @import 或外部 url()。
 4. 所有 href 只能是頁內錨點，或是內嵌 spec evidence 內宣告過的 http(s) locator。
-5. 提供 --spec 時做配對驗證：spec 的 canonical hash 必須等於內嵌 hash，且重新 render 的 bytes 必須完全相同。
+5. 無條件用內嵌 spec 重新 render，結果必須與 artifact bytes 完全相同。
+6. 提供 --spec 時再做外部配對驗證：外部 spec 的 canonical hash 必須等於內嵌 hash。
 
 用法：
   python scripts/verify_artifact.py out.html
@@ -29,15 +30,16 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from render_html import CSP, META_RENDERER, META_SPEC_HASH, META_STYLE_HASH, RENDERER_VERSION, SPEC_PRE_ID, STYLE_SHA256_HEX, render  # noqa: E402
-from validate_spec import canonical_json, classify_locator, configure_stdout, load_spec, validate_spec  # noqa: E402
+from render_html import CSP, META_RENDERER, META_SPEC_HASH, META_STYLE_HASH, META_VERIFICATION_HASH, RENDERER_VERSION, SPEC_PRE_ID, STYLE_SHA256_HEX, VERIFICATION_PRE_ID, render  # noqa: E402
+from validate_spec import VERIFICATION_LEVELS, canonical_json, classify_locator, configure_stdout, load_spec, validate_spec  # noqa: E402
 
-VERIFIER_VERSION = "1.0.0"
+VERIFIER_VERSION = "1.2.0"
 
 STYLE_BLOCK = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 META_PATTERN = re.compile(r'<meta\s+name="([^"]+)"\s+content="([^"]*)"', re.IGNORECASE)
 CSP_PATTERN = re.compile(r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"', re.IGNORECASE)
 SPEC_PRE = re.compile(rf'<pre hidden id="{re.escape(SPEC_PRE_ID)}">(.*?)</pre>', re.DOTALL)
+VERIFICATION_PRE = re.compile(rf'<pre hidden id="{re.escape(VERIFICATION_PRE_ID)}">(.*?)</pre>', re.DOTALL)
 HREF_PATTERN = re.compile(r'href="([^"]*)"', re.IGNORECASE)
 FORBIDDEN_MARKUP = {
     "script_tag": re.compile(r"<\s*script\b", re.IGNORECASE),
@@ -62,6 +64,7 @@ def _finding(code: str, message: str) -> dict[str, str]:
 def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
     findings: list[dict[str, str]] = []
     metas = dict(META_PATTERN.findall(html_text))
+    reproduction: dict[str, Any] = {"byte_identical": False}
 
     styles = STYLE_BLOCK.findall(html_text)
     if len(styles) != 1:
@@ -92,6 +95,7 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
             findings.append(_finding(code, f"artifact 含有被禁止的內容：{code}"))
 
     embedded_spec: Any | None = None
+    verification_levels: dict[str, str] | None = None
     pre_blocks = SPEC_PRE.findall(html_text)
     if len(pre_blocks) != 1:
         findings.append(_finding("embedded_spec_count", f"必須剛好有一個內嵌 spec 區塊，實際 {len(pre_blocks)} 個"))
@@ -107,6 +111,41 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
             validation = validate_spec(embedded_spec)
             for item in validation.errors:
                 findings.append(_finding("embedded_spec_invalid", f"{item.code}: {item.message}"))
+
+    verification_blocks = VERIFICATION_PRE.findall(html_text)
+    if len(verification_blocks) != 1:
+        findings.append(_finding("verification_manifest_count", f"必須剛好有一個 verification manifest，實際 {len(verification_blocks)} 個"))
+    else:
+        try:
+            manifest = json.loads(html.unescape(verification_blocks[0]))
+            levels = manifest.get("levels") if isinstance(manifest, dict) and manifest.get("version") == 1 else None
+            if not isinstance(levels, dict) or not all(isinstance(key, str) and value in VERIFICATION_LEVELS for key, value in levels.items()):
+                raise ValueError("manifest 必須是 version=1 且 levels 為合法 evidence→level 對照")
+            verification_levels = levels
+            manifest_hash = hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest()
+            reproduction["verification_sha256"] = manifest_hash
+            if metas.get(META_VERIFICATION_HASH) != manifest_hash:
+                findings.append(_finding("verification_manifest_hash_mismatch", "verification manifest 的 SHA-256 與 meta 記錄不符"))
+            if isinstance(embedded_spec, dict):
+                expected_ids = {item["id"] for item in embedded_spec.get("evidence", []) if isinstance(item, dict) and item.get("status") == "verified" and isinstance(item.get("id"), str)}
+                if set(levels) != expected_ids:
+                    findings.append(_finding("verification_manifest_evidence_mismatch", "verification manifest 必須剛好覆蓋全部 verified evidence"))
+        except ValueError as exc:
+            findings.append(_finding("verification_manifest_invalid", f"verification manifest 不合法：{exc}"))
+
+    if isinstance(embedded_spec, dict) and verification_levels is not None and not any(item["code"] == "embedded_spec_invalid" for item in findings):
+        try:
+            rerendered = render(embedded_spec, verification_levels=verification_levels)
+            reproduction["byte_identical"] = rerendered == html_text
+            if not reproduction["byte_identical"]:
+                findings.append(
+                    _finding(
+                        "embedded_render_mismatch",
+                        "用內嵌 spec 與檢驗 manifest 重新 render 的結果與 artifact bytes 不同；可見正文或其他 renderer 輸出已被修改",
+                    )
+                )
+        except ValueError as exc:
+            findings.append(_finding("verification_manifest_invalid", str(exc)))
 
     allowed_links: set[str] = set()
     if isinstance(embedded_spec, dict):
@@ -130,10 +169,7 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
         else:
             validation = validate_spec(spec)
             if validation.ok:
-                rerendered = render(spec)
-                pair["byte_identical"] = rerendered == html_text
-                if not pair["byte_identical"]:
-                    findings.append(_finding("pair_render_mismatch", "重新 render 的結果與 artifact bytes 不同；artifact 已被修改或 renderer 版本不同"))
+                pair["byte_identical"] = reproduction["byte_identical"]
             else:
                 findings.append(_finding("pair_spec_invalid", "提供的 spec 未通過驗證，無法重新 render"))
 
@@ -144,6 +180,7 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
         "spec_sha256": metas.get(META_SPEC_HASH),
         "style_sha256": metas.get(META_STYLE_HASH),
         "html_sha256": hashlib.sha256(html_text.encode("utf-8")).hexdigest(),
+        "reproduction": reproduction,
         "pair": pair,
         "findings": findings,
     }
@@ -158,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_stdout()
 
     try:
-        html_text = Path(args.html).read_text(encoding="utf-8")
+        html_text = Path(args.html).read_bytes().decode("utf-8")
         spec = load_spec(args.spec) if args.spec else None
     except (OSError, ValueError) as exc:
         report = {"verifier_version": VERIFIER_VERSION, "status": "FAIL", "findings": [_finding("input_unreadable", str(exc))]}

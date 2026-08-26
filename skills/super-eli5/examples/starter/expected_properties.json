@@ -21,6 +21,7 @@
   "evidence_rules": {
     "verified_needs_quote": true,
     "url_needs_retrieved_at": true,
+    "url_needs_content_sha256": true,
     "example_numbers_marked_analogy": true
   },
   "minimum_use_cases": 1
