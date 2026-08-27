@@ -1,7 +1,7 @@
 ---
 name: super-eli5
 description: "當使用者要把複雜的概念、程式或資料模組、方案取捨、事故或指標口徑，解釋成連五歲小孩或完全外行的主管都能懂，但仍誠實標出哪些是類比、哪些是推論、哪些有來源時使用。常見觸發像「用 ELI5 解釋」「像跟五歲小孩講」「超白話說明這段 SQL」「這個指標為什麼變了，講到老闆聽得懂」「explain like I'm five」「eli5 這段程式」。輸出固定六層：一句話版、一個類比與失真點、三層真相、一張圖一個場景、失效鏡頭與教回來、可稽核證據表；需要交付時再寫成 JSON story spec，經 validate_spec 綁定來源 SHA-256 與逐字引述後，編譯成零 JavaScript、離線可開、可配對驗證的單檔 HTML。不適用於正式技術文件、長文寫作、投影片、只要畫圖、純翻譯、需要先做多來源研究，或要求把推論包裝成事實的請求。"
-version: 2026.8.26
+version: 2026.8.27
 license: MIT
 metadata: {"author":"Openclaw-Metis","language":"zh-TW","category":"explanation","short-description":"證據誠實的超白話解說：一句話、類比、三層真相、失效鏡頭與可稽核的離線 HTML","openclaw":{"emoji":"🧒"}}
 ---
@@ -127,13 +127,13 @@ Step 4: 需要交付時寫 JSON story spec
 - Action: 依 [spec contract](references/spec-contract.md) 與 [story spec template](assets/templates/story-spec.template.json) 寫 spec v1。對照 [p 值範例](assets/examples/concept-p-value.zh-TW.json)、[MAU 範例](assets/examples/metric-mau.zh-TW.json)、[儀表板歸零範例](assets/examples/incident-dashboard-zero.zh-TW.json)，以及它們使用的 [ASA p-value 聲明快照](assets/examples/sources/concept/asa-p-value-statement.txt)、[MAU 查詢](assets/examples/sources/metrics/mau.sql)、[指標字典](assets/examples/sources/metrics/metric_dictionary.md)、[ETL log](assets/examples/sources/incident/etl_run.log)、[事後筆記](assets/examples/sources/incident/postmortem-notes.md)。
 - Input: Markdown 解說、evidence 清單
 - Output: `spec.json`（locator 相對於來源根目錄，不含絕對路徑或使用者名稱）
-- Validation: 頂層欄位只用契約定義的鍵；node id 全域唯一
+- Validation: 頂層欄位只用契約定義的鍵；node id 全域唯一；只寫 RFC 8259 JSON（不可使用 `NaN`／`Infinity`）；所有 reference 欄位都使用字串或字串陣列
 
 Step 5: 驗證並綁定證據
 - Action: 執行 `python scripts/validate_spec.py spec.json --source-root SRC --check-quotes --bind --out spec.bound.json`；若 quote 或 hash 不符，回到 Step 1，不得改 quote 湊數。
 - Input: `spec.json`、來源根目錄 SRC
 - Output: `spec.bound.json` 與每筆 verified 的實際檢驗等級
-- Validation: status 為 PASS；本機 verified 全部 quote-checked；沒有 quote_not_found 或 content_sha256_mismatch
+- Validation: status 為 PASS；本機 verified 全部 quote-checked；沒有 source_not_found、quote_not_found 或 content_sha256_mismatch
 
 Step 6: 編譯並配對驗證 HTML
 - Action: 執行 `python scripts/render_html.py spec.bound.json out/explainer.html --workspace out --source-root SRC --check-quotes`，再執行 `python scripts/verify_artifact.py out/explainer.html --spec spec.bound.json --json`。renderer 只顯示本次檢查結果，並雜湊鎖定 verification manifest。

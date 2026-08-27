@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.8.27
+
+- validator 改採 strict RFC 8259 JSON，拒絕 `NaN`／`Infinity` 與 boolean 冒充 integer。
+- reference type contract 強化：edge、trace、module 與 tradeoff 的 id 參照遇到 structured value 時回報精確錯誤，不再拋出 `TypeError`；`options[].nodes` 必須是不可重複的字串陣列。
+- 明確執行 `--check-quotes` 或 `--bind` 時，缺失／無法讀取的本機來源改為阻擋錯誤，不再以 structural 警告放行。
+- standalone verifier 與 repository release contract 拒絕非標準 JSON；惡意內嵌 spec 會得到 finding 而不是 crash。
+- 新增 6 個 failure-mode regression tests；測試增至 39 個。
+
 ## 2026.8.26
 
 - 修復跨平台 checkout 換行造成 bundled example hash 在 Windows 失敗。

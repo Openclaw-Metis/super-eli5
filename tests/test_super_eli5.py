@@ -89,6 +89,14 @@ class CanonicalFormTests(unittest.TestCase):
         self.assertEqual(vs.spec_sha256(spec), vs.spec_sha256(reordered))
         self.assertNotIn("\n", vs.canonical_json(spec))
 
+    def test_loader_rejects_non_standard_json_constants(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="super-eli5-json-") as tmp:
+            path = Path(tmp) / "non-standard.json"
+            for constant in ("NaN", "Infinity", "-Infinity"):
+                path.write_text(f'{{"version": {constant}}}', encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "非標準 JSON 常數"):
+                    vs.load_spec(path)
+
 
 class ValidatorContractTests(unittest.TestCase):
     def test_minimal_concept_passes(self) -> None:
@@ -100,6 +108,15 @@ class ValidatorContractTests(unittest.TestCase):
         spec = minimal_concept_spec()
         spec["extra"] = 1
         self.assertIn("top_level_unknown_field", error_codes(vs.validate_spec(spec)))
+
+    def test_boolean_cannot_impersonate_integer_fields(self) -> None:
+        version = minimal_concept_spec()
+        version["version"] = True
+        self.assertIn("version_unsupported", error_codes(vs.validate_spec(version)))
+
+        trace = minimal_concept_spec()
+        trace["trace"][0]["step"] = True
+        self.assertIn("trace_step_type", error_codes(vs.validate_spec(trace)))
 
     def test_duplicate_node_ids_across_scenes_rejected(self) -> None:
         spec = minimal_concept_spec()
@@ -115,6 +132,15 @@ class ValidatorContractTests(unittest.TestCase):
         codes = error_codes(vs.validate_spec(spec))
         self.assertIn("edge_ref_missing", codes)
         self.assertIn("edge_self_loop", codes)
+
+    def test_structured_reference_values_fail_without_crashing(self) -> None:
+        edge = minimal_concept_spec()
+        edge["scenes"][0]["edges"][0]["from"] = {}
+        self.assertIn("edge_ref_type", error_codes(vs.validate_spec(edge)))
+
+        trace = minimal_concept_spec()
+        trace["trace"][0]["node"] = []
+        self.assertIn("trace_node_type", error_codes(vs.validate_spec(trace)))
 
     def test_unsafe_locators_rejected(self) -> None:
         for locator in ("javascript:alert(1)", "data:text/html,hi", "/etc/passwd", "C:\\secrets\\x.txt", "../outside.md", "~/notes.md", "ftp://host/file"):
@@ -222,6 +248,10 @@ class ModeContractTests(unittest.TestCase):
         analogy_entry["scenes"][0]["nodes"][0]["evidence"] = []
         self.assertIn("module_node_analogy", error_codes(vs.validate_spec(analogy_entry)))
 
+        invalid_entry = copy.deepcopy(spec)
+        invalid_entry["mode_data"]["entry"] = {}
+        self.assertIn("module_node_type", error_codes(vs.validate_spec(invalid_entry)))
+
     def test_tradeoff_recommendation_rules(self) -> None:
         spec = vs.load_spec(FIXTURES / "tradeoff-batch-vs-stream.en.json")
         spec["evidence"][0]["content_sha256"] = "0" * 64
@@ -235,6 +265,22 @@ class ModeContractTests(unittest.TestCase):
         one_option = copy.deepcopy(spec)
         one_option["mode_data"]["options"] = one_option["mode_data"]["options"][:1]
         self.assertIn("list_bounds", error_codes(vs.validate_spec(one_option)))
+
+    def test_tradeoff_node_references_have_an_explicit_array_contract(self) -> None:
+        spec = vs.load_spec(FIXTURES / "tradeoff-batch-vs-stream.en.json")
+        spec["evidence"][0]["content_sha256"] = "0" * 64
+
+        string_nodes = copy.deepcopy(spec)
+        string_nodes["mode_data"]["options"][0]["nodes"] = "n_batch"
+        self.assertIn("option_nodes_type", error_codes(vs.validate_spec(string_nodes)))
+
+        structured_node = copy.deepcopy(spec)
+        structured_node["mode_data"]["options"][0]["nodes"] = [{}]
+        self.assertIn("option_node_type", error_codes(vs.validate_spec(structured_node)))
+
+        structured_recommendation = copy.deepcopy(spec)
+        structured_recommendation["mode_data"]["recommendation"]["option"] = {}
+        self.assertIn("recommendation_option_type", error_codes(vs.validate_spec(structured_recommendation)))
 
 
 class ProvenanceBindingTests(unittest.TestCase):
@@ -274,6 +320,18 @@ class ProvenanceBindingTests(unittest.TestCase):
         outside_range["evidence"][0]["line_end"] = 5
         result = vs.validate_spec(outside_range, source_root=self.root, check_quotes=True, bind=True)
         self.assertIn("quote_not_found", error_codes(result))
+
+    def test_explicit_quote_check_or_bind_fails_when_source_is_missing(self) -> None:
+        spec = vs.load_spec(FIXTURES / "module-daily-orders.zh-TW.json")
+        spec["evidence"][0]["content_sha256"] = "0" * 64
+        missing_root = self.root / "missing"
+        missing_root.mkdir()
+
+        checked = vs.validate_spec(copy.deepcopy(spec), source_root=missing_root, check_quotes=True)
+        self.assertIn("source_not_found", error_codes(checked))
+
+        bound = vs.validate_spec(copy.deepcopy(spec), source_root=missing_root, bind=True)
+        self.assertIn("source_not_found", error_codes(bound))
 
     def test_locator_cannot_escape_source_root(self) -> None:
         spec = vs.load_spec(FIXTURES / "module-daily-orders.zh-TW.json")
@@ -396,6 +454,13 @@ class RenderAndVerifyTests(unittest.TestCase):
         linked = html_text.replace("</footer>", '<a href="https://evil.example/x">x</a></footer>', 1)
         codes = {item["code"] for item in va.verify_html(linked)["findings"]}
         self.assertIn("link_not_allowed", codes)
+
+    def test_non_standard_embedded_json_is_reported_instead_of_crashing(self) -> None:
+        html_text = render_html.render(minimal_concept_spec())
+        malformed = html_text.replace('&quot;version&quot;:1', '&quot;version&quot;:NaN', 1)
+        report = va.verify_html(malformed)
+        self.assertEqual(report["status"], "FAIL")
+        self.assertIn("embedded_spec_invalid_json", {item["code"] for item in report["findings"]})
 
     def test_all_languages_render(self) -> None:
         for language, marker in (("zh-TW", "一句話版"), ("zh-CN", "一句话版"), ("en", "One sentence")):

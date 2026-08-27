@@ -22,7 +22,7 @@
 | `evidence` | 是 | 1 至 40 筆 |
 | `mode_data` | 是 | 依 mode 的契約 |
 
-沒有列出的頂層欄位一律拒絕（closed schema）。長度以「全形字寬」計：中文一字算 2，英數算 1，所以英文可以寫到兩倍字元數。
+沒有列出的頂層欄位一律拒絕（closed schema）。輸入必須是 RFC 8259 JSON；Python JSON decoder 預設容許的 `NaN`、`Infinity` 與 `-Infinity` 一律拒絕。長度以「全形字寬」計：中文一字算 2，英數算 1，所以英文可以寫到兩倍字元數。
 
 ## 場景、節點、連線
 
@@ -39,7 +39,7 @@
 
 ## trace
 
-- `step` 從 1 開始連續編號；`scene` 必須是 `node` 所屬的場景。
+- `step` 必須是真正的 JSON integer（boolean 不算），並從 1 開始連續編號；`scene` 與 `node` 必須是字串 id，且 `scene` 是 `node` 所屬的場景。
 - artifact 以純 CSS 提供逐步回放（radio 按鈕），最多 24 步。
 
 ## failure_lens、teach_back、glossary
@@ -70,7 +70,7 @@
 
 - `concept`：`misconceptions[]`（1 至 8；`myth`、`reality`）。
 - `module`：`source_root`、`entry`、`exit`、`inputs[]`、`outputs[]`；至少一筆 verified 本機路徑 evidence。
-- `tradeoff`：`options[]`（2 至 5；`id`、`name`、`gains[]`、`costs[]`、可選 `nodes[]`）、`decision_rule`、`recommendation{option,status,because,evidence}`。
+- `tradeoff`：`options[]`（2 至 5；`id`、`name`、`gains[]`、`costs[]`、可選且不可重複的 node id 字串陣列 `nodes[]`）、`decision_rule`、`recommendation{option,status,because,evidence}`。
 - `incident`：`timeline[]`（2 至 24；`t`、`event`、`kind`、`evidence`）、`root_cause{text,status,evidence}`、可選 `contributing_factors[]`。
 - `metric`：`metric_name`、`definition{text,status,evidence}`、`lineage[]`（1 至 12；`from`、`to`、`transform`）、`scope{grain,time_window,filters}`、可選 `comparison{before,after,evidence}`。
 
@@ -86,5 +86,5 @@
 4. 所有 `href` 只能是頁內錨點，或內嵌 spec 的 evidence 內宣告過的 http(s) locator（帶 `rel="noopener noreferrer"`）。
 5. `pre#super-eli5-spec` 內嵌 HTML-escaped 的 canonical spec；`meta[name=super-eli5-spec-sha256]` 等於 canonical JSON（`sort_keys`、緊湊分隔、UTF-8）的 SHA-256。
 6. `pre#super-eli5-verification` 內嵌本次工具產生的 evidence→level manifest；其 canonical hash 寫在 `meta[name=super-eli5-verification-sha256]`。renderer 不採信 spec 自行宣告的等級。
-7. 同一份 spec 與 verification manifest 重新 render 必須 byte-for-byte 相同；verifier 不需外部 `--spec` 就會重建比對，提供 `--spec` 時再額外確認配對。
+7. 同一份 spec 與 verification manifest 重新 render 必須 byte-for-byte 相同；verifier 不需外部 `--spec` 就會重建比對，提供 `--spec` 時再額外確認配對。內嵌或外部 spec 若含非標準 JSON 常數，verifier 必須回報 finding，不得 crash。
 8. 輸出沒有時間戳、隨機值或環境資訊。

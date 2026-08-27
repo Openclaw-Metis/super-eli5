@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 SPEC_VERSION = 1
-VALIDATOR_VERSION = "1.1.0"
+VALIDATOR_VERSION = "1.2.0"
 
 LANGUAGES = ("zh-TW", "zh-CN", "en")
 MODES = ("concept", "module", "tradeoff", "incident", "metric")
@@ -180,11 +180,23 @@ def spec_sha256(spec: Any) -> str:
     return hashlib.sha256(canonical_json(spec).encode("utf-8")).hexdigest()
 
 
+def strict_json_loads(payload: str) -> Any:
+    """只接受 RFC 8259 JSON；Python 預設容許的 NaN/Infinity 必須拒絕。"""
+
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"非標準 JSON 常數：{value}")
+
+    try:
+        return json.loads(payload, parse_constant=reject_constant)
+    except RecursionError as exc:
+        raise ValueError("JSON 巢狀層級過深") from exc
+
+
 def load_spec(path: Path | str) -> Any:
     raw = Path(path).read_bytes()
     if raw.startswith(b"\xef\xbb\xbf"):
         raw = raw[3:]
-    return json.loads(raw.decode("utf-8"))
+    return strict_json_loads(raw.decode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +428,8 @@ def _validate_top_level(result: ValidationResult, spec: Any) -> bool:
     if missing:
         result.error("top_level_missing_field", f"缺少必要欄位：{', '.join(missing)}", "$")
         return False
-    if spec.get("version") != SPEC_VERSION:
+    version = spec.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != SPEC_VERSION:
         result.error("version_unsupported", f"version 必須是 {SPEC_VERSION}", "version")
     if spec.get("language") not in LANGUAGES:
         result.error("language_unsupported", f"language 必須是 {', '.join(LANGUAGES)} 之一", "language")
@@ -503,6 +516,9 @@ def _validate_scenes(result: ValidationResult, spec: dict[str, Any], catalog: di
                 if unknown:
                     result.error("edge_unknown_field", f"{e_path} 含未定義欄位：{', '.join(unknown)}", e_path)
                 source, target = edge.get("from"), edge.get("to")
+                if not _is_text(source) or not _is_text(target):
+                    result.error("edge_ref_type", f"{e_path} 的 from/to 必須是 node id 字串", e_path)
+                    continue
                 if source not in local_nodes or target not in local_nodes:
                     result.error("edge_ref_missing", f"{e_path} 的 from/to 必須是同一場景內的 node id", e_path)
                     continue
@@ -529,12 +545,20 @@ def _validate_trace(result: ValidationResult, spec: dict[str, Any], node_index: 
         unknown = sorted(set(step) - {"step", "scene", "node", "text"})
         if unknown:
             result.error("trace_unknown_field", f"{path} 含未定義欄位：{', '.join(unknown)}", path)
-        if step.get("step") != index + 1:
+        step_number = step.get("step")
+        if not isinstance(step_number, int) or isinstance(step_number, bool):
+            result.error("trace_step_type", f"{path}.step 必須是整數", f"{path}.step")
+        elif step_number != index + 1:
             result.error("trace_step_sequence", f"{path}.step 必須是 {index + 1}（從 1 開始連續編號）", path)
         node = step.get("node")
-        if node not in node_index:
+        scene = step.get("scene")
+        if not _is_text(node):
+            result.error("trace_node_type", f"{path}.node 必須是 node id 字串", f"{path}.node")
+        elif node not in node_index:
             result.error("trace_node_missing", f"{path}.node 不存在：{node}", path)
-        elif step.get("scene") != node_index[node]["scene"]:
+        elif not _is_text(scene):
+            result.error("trace_scene_type", f"{path}.scene 必須是 scene id 字串", f"{path}.scene")
+        elif scene != node_index[node]["scene"]:
             result.error("trace_scene_mismatch", f"{path}.scene 與 node 所屬場景不符", path)
         _check_text(result, step.get("text"), f"{path}.text", max_len=MAX_LEN["trace.text"])
 
@@ -641,7 +665,9 @@ def _validate_mode_module(result: ValidationResult, data: dict[str, Any], catalo
         result.error("source_root_invalid", "mode_data.source_root 必須是相對 POSIX 路徑", "mode_data.source_root")
     for key in ("entry", "exit"):
         node = data.get(key)
-        if node not in node_index:
+        if not _is_text(node):
+            result.error("module_node_type", f"mode_data.{key} 必須是 node id 字串", f"mode_data.{key}")
+        elif node not in node_index:
             result.error("module_node_missing", f"mode_data.{key} 必須是存在的 node id", f"mode_data.{key}")
         elif node_index[node]["status"] == "analogy":
             result.error("module_node_analogy", f"mode_data.{key} 指向的 node 不可以是 analogy", f"mode_data.{key}")
@@ -671,15 +697,30 @@ def _validate_mode_tradeoff(result: ValidationResult, data: dict[str, Any], cata
             _check_text(result, option.get("name"), f"{path}.name", max_len=MAX_LEN["glossary.term"])
             _string_list(result, option.get("gains"), f"{path}.gains", min_items=1, max_items=6)
             _string_list(result, option.get("costs"), f"{path}.costs", min_items=1, max_items=6)
-            for node in option.get("nodes", []) or []:
-                if node not in node_index:
-                    result.error("option_node_missing", f"{path}.nodes 參照不存在的 node：{node}", path)
+            nodes = option.get("nodes", [])
+            if not isinstance(nodes, list):
+                result.error("option_nodes_type", f"{path}.nodes 必須是 node id 字串陣列", f"{path}.nodes")
+            else:
+                seen_nodes: set[str] = set()
+                for node_index_in_option, node in enumerate(nodes):
+                    node_path = f"{path}.nodes[{node_index_in_option}]"
+                    if not _is_text(node):
+                        result.error("option_node_type", f"{node_path} 必須是 node id 字串", node_path)
+                    elif node not in node_index:
+                        result.error("option_node_missing", f"{node_path} 參照不存在的 node：{node}", node_path)
+                    elif node in seen_nodes:
+                        result.error("option_node_duplicate", f"{node_path} 重複參照 node：{node}", node_path)
+                    else:
+                        seen_nodes.add(node)
     _check_text(result, data.get("decision_rule"), "mode_data.decision_rule", max_len=MAX_LEN["generic"])
     recommendation = data.get("recommendation")
     if not isinstance(recommendation, dict) or set(recommendation) - {"option", "status", "because", "evidence"}:
         result.error("recommendation_shape", "mode_data.recommendation 必須包含 option、status、because，並可選 evidence", "mode_data.recommendation")
         return
-    if recommendation.get("option") not in option_ids:
+    recommended_option = recommendation.get("option")
+    if not _is_text(recommended_option):
+        result.error("recommendation_option_type", "mode_data.recommendation.option 必須是 option id 字串", "mode_data.recommendation.option")
+    elif recommended_option not in option_ids:
         result.error("recommendation_option_missing", "mode_data.recommendation.option 必須是 options 內的 id", "mode_data.recommendation")
     status = _check_status(result, recommendation.get("status"), "mode_data.recommendation.status", allow_analogy=False)
     _check_text(result, recommendation.get("because"), "mode_data.recommendation.because", max_len=MAX_LEN["generic"])
@@ -848,15 +889,28 @@ def check_local_evidence(spec: dict[str, Any], source_root: Path, *, check_quote
             continue
         if kind != "path":
             continue
-        source = resolve_local_source(source_root, locator)
+        try:
+            source = resolve_local_source(source_root, locator)
+        except (OSError, RuntimeError) as exc:
+            result.error("source_resolve_failed", f"{path}.locator 無法安全解析：{exc}", path)
+            continue
         if source is None:
             result.error("locator_escapes_source_root", f"{path}.locator 逃出 --source-root 的路徑邊界", path)
             continue
         if not source.is_file():
-            result.warn("source_not_found", f"{path}.locator 在 --source-root 下找不到檔案，只能維持 structural", path)
+            message = f"{path}.locator 在 --source-root 下找不到檔案，只能維持 structural"
+            if check_quotes or bind:
+                result.error("source_not_found", message + "；明確要求 quote check / bind 時不可放行", path)
+            else:
+                result.warn("source_not_found", message, path)
             result.verification[str(item.get("id"))] = "structural"
             continue
-        raw = source.read_bytes()
+        try:
+            raw = source.read_bytes()
+        except OSError as exc:
+            result.error("source_unreadable", f"{path}.locator 無法讀取：{exc}", path)
+            result.verification[str(item.get("id"))] = "structural"
+            continue
         digest = hashlib.sha256(raw).hexdigest()
         recorded = item.get("content_sha256")
         level = "structural"

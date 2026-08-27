@@ -32,8 +32,11 @@ def finding(code: str, message: str, path: Path | None = None) -> dict[str, str]
 
 
 def load_json(path: Path, findings: list[dict[str, str]]) -> Any | None:
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"non-standard JSON constant: {value}")
+
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject_constant)
     except (OSError, ValueError) as exc:
         findings.append(finding("json_invalid", str(exc), path))
         return None

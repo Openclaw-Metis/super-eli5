@@ -71,7 +71,8 @@ python scripts/verify_artifact.py out/mau.html --spec assets/examples/metric-mau
 
 ## 安全模型
 
-- 驗證器只讀不寫；`--bind` 與 render 才寫檔，且採 no-clobber（要覆寫必須明確 `--force`）、workspace 路徑邊界、拒絕 symlink、暫存檔加原子替換。
+- 驗證器平時只讀；`--bind` 只寫到明確指定的 `--out`，並採 no-clobber、拒絕 symlink、暫存檔加原子替換。renderer 另要求輸出位於 `--workspace` 路徑邊界內；兩者要覆寫既有檔案都必須明確加 `--force`。
+- spec 與 artifact 內嵌 manifest 採 strict RFC 8259 JSON；`NaN`／`Infinity`、boolean 冒充 integer、非字串 reference 都會被拒絕，惡意輸入會回報 FAIL 而不是讓 verifier crash。
 - locator 只接受 http(s) URL 或相對 POSIX 路徑；絕對路徑、`..`、`~`、`javascript:`、`data:` 一律拒絕，來源讀取不會逃出 `--source-root`。
 - artifact 不含任何 script、外部資源、inline style 屬性或事件屬性；CSP 為 `default-src 'none'; style-src 'sha256-…'`；只有 evidence 宣告過的 URL 會成為連結。
 - renderer 不採信 spec 自稱的檢驗等級；可見等級取自本次 validator 結果，存入獨立、雜湊鎖定的 verification manifest。verifier 即使未提供 `--spec`，也會重建整份 HTML 比對 bytes。
@@ -81,7 +82,7 @@ python scripts/verify_artifact.py out/mau.html --spec assets/examples/metric-mau
 ## 開發與驗證
 
 ```bash
-python -m unittest discover -s tests -v          # 33 個測試：契約、provenance、綁定、對抗文字、決定性、竄改、檔案安全
+python -m unittest discover -s tests -v          # 39 個測試：契約、strict JSON、provenance、綁定、對抗文字、決定性、竄改、檔案安全
 python skills/super-eli5/scripts/self_check.py   # 內建範例 validate → render ×2 → verify
 python tests/release_contract.py --json          # CI 可重跑的結構、eval、reference、lifecycle 與 LF 發版契約
 ```

@@ -52,6 +52,7 @@
 | `git_identity_incomplete` | commit_sha 與 repo_url 只出現一個 | 補成成對欄位；commit_sha 必須完整 40 位 |
 | `quote_not_found` | 引述不在來源或行號範圍內 | 重新核對來源；改行號或改引述；仍找不到就降為 inferred |
 | `content_sha256_mismatch` | 來源已改動 | 重新讀來源、更新解說、重新 `--bind` |
+| `source_not_found` | 明確要求 quote check／bind，但 locator 在來源根目錄下不存在 | 修正 `--source-root` 或 locator；真的讀到來源後再執行，不可降成 structural 放行 |
 | `status_analogy_forbidden` | 類比被當成根因、定義或建議 | 改成 inferred 並補 reasoning，或找來源升級為 verified |
 | `analogy_only` | 所有節點都是類比 | 至少加一個技術事實節點 |
 | `timeline_recovery_before_break` | 恢復事件早於第一次出錯 | 檢查時間與 kind |

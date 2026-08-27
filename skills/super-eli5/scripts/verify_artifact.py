@@ -31,9 +31,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_html import CSP, META_RENDERER, META_SPEC_HASH, META_STYLE_HASH, META_VERIFICATION_HASH, RENDERER_VERSION, SPEC_PRE_ID, STYLE_SHA256_HEX, VERIFICATION_PRE_ID, render  # noqa: E402
-from validate_spec import VERIFICATION_LEVELS, canonical_json, classify_locator, configure_stdout, load_spec, validate_spec  # noqa: E402
+from validate_spec import VERIFICATION_LEVELS, canonical_json, classify_locator, configure_stdout, load_spec, strict_json_loads, validate_spec  # noqa: E402
 
-VERIFIER_VERSION = "1.2.0"
+VERIFIER_VERSION = "1.3.0"
 
 STYLE_BLOCK = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 META_PATTERN = re.compile(r'<meta\s+name="([^"]+)"\s+content="([^"]*)"', re.IGNORECASE)
@@ -101,7 +101,7 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
         findings.append(_finding("embedded_spec_count", f"必須剛好有一個內嵌 spec 區塊，實際 {len(pre_blocks)} 個"))
     else:
         try:
-            embedded_spec = json.loads(html.unescape(pre_blocks[0]))
+            embedded_spec = strict_json_loads(html.unescape(pre_blocks[0]))
         except ValueError as exc:
             findings.append(_finding("embedded_spec_invalid_json", f"內嵌 spec 不是合法 JSON：{exc}"))
         if embedded_spec is not None:
@@ -117,7 +117,7 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
         findings.append(_finding("verification_manifest_count", f"必須剛好有一個 verification manifest，實際 {len(verification_blocks)} 個"))
     else:
         try:
-            manifest = json.loads(html.unescape(verification_blocks[0]))
+            manifest = strict_json_loads(html.unescape(verification_blocks[0]))
             levels = manifest.get("levels") if isinstance(manifest, dict) and manifest.get("version") == 1 else None
             if not isinstance(levels, dict) or not all(isinstance(key, str) and value in VERIFICATION_LEVELS for key, value in levels.items()):
                 raise ValueError("manifest 必須是 version=1 且 levels 為合法 evidence→level 對照")
@@ -162,16 +162,20 @@ def verify_html(html_text: str, spec: Any | None = None) -> dict[str, Any]:
 
     pair: dict[str, Any] = {}
     if spec is not None:
-        spec_hash = hashlib.sha256(canonical_json(spec).encode("utf-8")).hexdigest()
-        pair["spec_sha256"] = spec_hash
-        if metas.get(META_SPEC_HASH) != spec_hash:
-            findings.append(_finding("pair_spec_hash_mismatch", "提供的 spec 與 artifact 內嵌 hash 不符"))
+        try:
+            spec_hash = hashlib.sha256(canonical_json(spec).encode("utf-8")).hexdigest()
+        except (TypeError, ValueError, RecursionError) as exc:
+            findings.append(_finding("pair_spec_invalid_json", f"提供的 spec 無法轉成 canonical JSON：{exc}"))
         else:
-            validation = validate_spec(spec)
-            if validation.ok:
-                pair["byte_identical"] = reproduction["byte_identical"]
+            pair["spec_sha256"] = spec_hash
+            if metas.get(META_SPEC_HASH) != spec_hash:
+                findings.append(_finding("pair_spec_hash_mismatch", "提供的 spec 與 artifact 內嵌 hash 不符"))
             else:
-                findings.append(_finding("pair_spec_invalid", "提供的 spec 未通過驗證，無法重新 render"))
+                validation = validate_spec(spec)
+                if validation.ok:
+                    pair["byte_identical"] = reproduction["byte_identical"]
+                else:
+                    findings.append(_finding("pair_spec_invalid", "提供的 spec 未通過驗證，無法重新 render"))
 
     return {
         "verifier_version": VERIFIER_VERSION,
