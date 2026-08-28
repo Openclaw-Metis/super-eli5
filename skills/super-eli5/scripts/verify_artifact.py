@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from render_html import CSP, META_RENDERER, META_SPEC_HASH, META_STYLE_HASH, META_VERIFICATION_HASH, RENDERER_VERSION, SPEC_PRE_ID, STYLE_SHA256_HEX, VERIFICATION_PRE_ID, render  # noqa: E402
 from validate_spec import VERIFICATION_LEVELS, canonical_json, classify_locator, configure_stdout, load_spec, strict_json_loads, validate_spec  # noqa: E402
 
-VERIFIER_VERSION = "1.3.0"
+VERIFIER_VERSION = "1.4.0"
 
 STYLE_BLOCK = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 META_PATTERN = re.compile(r'<meta\s+name="([^"]+)"\s+content="([^"]*)"', re.IGNORECASE)

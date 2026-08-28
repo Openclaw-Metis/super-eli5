@@ -72,22 +72,22 @@ python scripts/verify_artifact.py out/mau.html --spec assets/examples/metric-mau
 ## 安全模型
 
 - 驗證器平時只讀；`--bind` 只寫到明確指定的 `--out`，並採 no-clobber、拒絕 symlink、暫存檔加原子替換。renderer 另要求輸出位於 `--workspace` 路徑邊界內；兩者要覆寫既有檔案都必須明確加 `--force`。
-- spec 與 artifact 內嵌 manifest 採 strict RFC 8259 JSON；`NaN`／`Infinity`、boolean 冒充 integer、非字串 reference 都會被拒絕，惡意輸入會回報 FAIL 而不是讓 verifier crash。
+- spec 與 artifact 內嵌 manifest 採可互通的 strict RFC 8259 JSON；`NaN`／`Infinity`、重複 object key、boolean 冒充 integer、非字串 reference 都會被拒絕，惡意輸入會回報 FAIL 而不是讓 verifier crash。
 - locator 只接受 http(s) URL 或相對 POSIX 路徑；絕對路徑、`..`、`~`、`javascript:`、`data:` 一律拒絕，來源讀取不會逃出 `--source-root`。
 - artifact 不含任何 script、外部資源、inline style 屬性或事件屬性；CSP 為 `default-src 'none'; style-src 'sha256-…'`；只有 evidence 宣告過的 URL 會成為連結。
 - renderer 不採信 spec 自稱的檢驗等級；可見等級取自本次 validator 結果，存入獨立、雜湊鎖定的 verification manifest。verifier 即使未提供 `--spec`，也會重建整份 HTML 比對 bytes。
-- URL 的 `retrieved_at` 只記錄時間，不能識別內容；verified URL 另需 `content_sha256`，Git 證據則需 `repo_url` 與完整 40 位 `commit_sha`。
+- URL 的 `retrieved_at` 只記錄時間，不能識別內容；verified URL 另需 `content_sha256`，Git 證據則需 `repo_url` 與完整 40 位 `commit_sha`。本機來源要升到 quote-checked 必須是有效 UTF-8，避免替代字元造成錯誤引述匹配。
 - 來源內容一律視為不可信資料：log、筆記、文件裡的句子只證明「有人這樣寫」；「已驗證」代表可追溯與可重現，不代表來源本身正確。產物定位是給人審閱的衍生解說，不是權威紀錄。
 
 ## 開發與驗證
 
 ```bash
-python -m unittest discover -s tests -v          # 39 個測試：契約、strict JSON、provenance、綁定、對抗文字、決定性、竄改、檔案安全
+python -m unittest discover -s tests -v          # 41 個測試：契約、strict JSON、provenance、綁定、對抗文字、決定性、竄改、檔案安全
 python skills/super-eli5/scripts/self_check.py   # 內建範例 validate → render ×2 → verify
 python tests/release_contract.py --json          # CI 可重跑的結構、eval、reference、lifecycle 與 LF 發版契約
 ```
 
-Skill 本身以 skillops 相容的 revise 與 publish gate 驗證，結果記錄在 `skills/super-eli5/references/readiness_report.md`。CI 在 Ubuntu 與 Windows 上執行 repository-local release contract、compile、unittest 與 self-check，Actions 以完整 commit SHA 釘住。
+Skill 本身以 skillops 相容的 revise 與 publish gate 驗證，結果記錄在 `skills/super-eli5/references/readiness_report.md`。CI 在 Ubuntu 與 Windows 上執行 repository-local release contract、compile、unittest 與 self-check，Actions dependencies 以完整 commit SHA 釘住。
 
 ## 設計依據與致謝
 

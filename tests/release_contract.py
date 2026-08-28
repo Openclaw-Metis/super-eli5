@@ -35,8 +35,20 @@ def load_json(path: Path, findings: list[dict[str, str]]) -> Any | None:
     def reject_constant(value: str) -> None:
         raise ValueError(f"non-standard JSON constant: {value}")
 
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        parsed: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in parsed:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            parsed[key] = value
+        return parsed
+
     try:
-        return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject_constant)
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            parse_constant=reject_constant,
+            object_pairs_hook=reject_duplicate_keys,
+        )
     except (OSError, ValueError) as exc:
         findings.append(finding("json_invalid", str(exc), path))
         return None

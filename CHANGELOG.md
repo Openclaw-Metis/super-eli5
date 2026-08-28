@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.8.28
+
+- 對齊 SkillOps Studio 2026.8.15 的 point-of-use／orphan 規則：starter fixtures、policies、schema、runtime scripts、QA 與 lifecycle 資源都接回首次使用步驟。
+- strict JSON loader 與 repository release contract 拒絕重複 object keys，避免不同 parser 對同一 spec、manifest 或 eval 產生 first-wins／last-wins 歧義。
+- quote check 改用嚴格 UTF-8 解碼；無效 UTF-8 來源可維持 content-bound，但不能利用替代字元升成 quote-checked。
+- 補上 duplicate-key 與 invalid-UTF-8 regression tests；測試增至 41 個。
+
 ## 2026.8.27
 
 - validator 改採 strict RFC 8259 JSON，拒絕 `NaN`／`Infinity` 與 boolean 冒充 integer。

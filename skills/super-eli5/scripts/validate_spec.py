@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 SPEC_VERSION = 1
-VALIDATOR_VERSION = "1.2.0"
+VALIDATOR_VERSION = "1.3.0"
 
 LANGUAGES = ("zh-TW", "zh-CN", "en")
 MODES = ("concept", "module", "tradeoff", "incident", "metric")
@@ -181,13 +181,21 @@ def spec_sha256(spec: Any) -> str:
 
 
 def strict_json_loads(payload: str) -> Any:
-    """只接受 RFC 8259 JSON；Python 預設容許的 NaN/Infinity 必須拒絕。"""
+    """只接受可互通的 RFC 8259 JSON；拒絕非有限數字與重複 object keys。"""
 
     def reject_constant(value: str) -> None:
         raise ValueError(f"非標準 JSON 常數：{value}")
 
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        parsed: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in parsed:
+                raise ValueError(f"JSON 物件鍵重複：{key}")
+            parsed[key] = value
+        return parsed
+
     try:
-        return json.loads(payload, parse_constant=reject_constant)
+        return json.loads(payload, parse_constant=reject_constant, object_pairs_hook=reject_duplicate_keys)
     except RecursionError as exc:
         raise ValueError("JSON 巢狀層級過深") from exc
 
@@ -923,17 +931,22 @@ def check_local_evidence(spec: dict[str, Any], source_root: Path, *, check_quote
             recorded = digest
         if recorded == digest:
             level = "content-bound"
-        text = raw.decode("utf-8", errors="replace")
-        lines = text.splitlines()
-        line_start, line_end = item.get("line_start"), item.get("line_end")
-        if isinstance(line_start, int) and isinstance(line_end, int) and not isinstance(line_start, bool):
-            if line_end > len(lines):
-                result.error("line_range_out_of_file", f"{path} 的 line_end 超過檔案總行數 {len(lines)}", path)
-                continue
-            haystack = "\n".join(lines[line_start - 1 : line_end])
-        else:
-            haystack = text
         if check_quotes or bind:
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                result.error("source_not_utf8", f"{path}.locator 不是有效 UTF-8，無法可靠核對文字引述：{exc}", path)
+                result.verification[str(item.get("id"))] = level
+                continue
+            lines = text.splitlines()
+            line_start, line_end = item.get("line_start"), item.get("line_end")
+            if isinstance(line_start, int) and isinstance(line_end, int) and not isinstance(line_start, bool):
+                if line_end > len(lines):
+                    result.error("line_range_out_of_file", f"{path} 的 line_end 超過檔案總行數 {len(lines)}", path)
+                    continue
+                haystack = "\n".join(lines[line_start - 1 : line_end])
+            else:
+                haystack = text
             quote = item.get("quote")
             if _is_text(quote) and _normalize_ws(quote) and _normalize_ws(quote) in _normalize_ws(haystack):
                 level = "quote-checked" if level == "content-bound" else level

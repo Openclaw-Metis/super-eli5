@@ -97,6 +97,11 @@ class CanonicalFormTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "非標準 JSON 常數"):
                     vs.load_spec(path)
 
+    def test_loader_rejects_duplicate_object_keys_at_any_depth(self) -> None:
+        for payload in ('{"version": 1, "version": 2}', '{"outer": {"claim": "first", "claim": "second"}}'):
+            with self.assertRaisesRegex(ValueError, "JSON 物件鍵重複"):
+                vs.strict_json_loads(payload)
+
 
 class ValidatorContractTests(unittest.TestCase):
     def test_minimal_concept_passes(self) -> None:
@@ -332,6 +337,16 @@ class ProvenanceBindingTests(unittest.TestCase):
 
         bound = vs.validate_spec(copy.deepcopy(spec), source_root=missing_root, bind=True)
         self.assertIn("source_not_found", error_codes(bound))
+
+    def test_quote_check_rejects_non_utf8_source_instead_of_replacement_match(self) -> None:
+        spec = vs.load_spec(FIXTURES / "module-daily-orders.zh-TW.json")
+        source = self.root / "pipeline" / "daily_orders.py"
+        source.write_bytes(b"\xffif len(rows) < MIN_ROWS:\n")
+        spec["evidence"][0]["content_sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+        spec["evidence"][0]["quote"] = "�if len(rows) < MIN_ROWS:"
+
+        result = vs.validate_spec(spec, source_root=self.root, check_quotes=True)
+        self.assertIn("source_not_utf8", error_codes(result))
 
     def test_locator_cannot_escape_source_root(self) -> None:
         spec = vs.load_spec(FIXTURES / "module-daily-orders.zh-TW.json")
